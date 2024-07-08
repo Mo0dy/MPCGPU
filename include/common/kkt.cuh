@@ -174,7 +174,7 @@ __global__ void generate_kkt_submatrices(uint32_t state_size,
             if (thread_id == 0 && block_id == 0)
             {
                 printf("Checking R generation! %d\n", k);
-                print_Matrix(s_Rk, control_size, control_size);
+                print_Matrix(s_integrator_error, state_size, control_size);
                 
             }
 
