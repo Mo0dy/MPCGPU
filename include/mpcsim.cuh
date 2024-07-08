@@ -225,8 +225,10 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     config.pcg_max_iter = 10000;
     
     for(int j = 0; j < 100; j++){
+        std::cout<<" going in the sqp loop"<<std::endl;
         sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, 1e-3);
         gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
+        break; //yana's check
     }
     rho = 1e-3;
     config.pcg_exit_tol = linsys_exit_tol;
@@ -265,7 +267,9 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
 
 #if LINSYS_SOLVE == 1
         //is it ok to call my kernel inside the sqpSolvePCG?
+        std::cout<<"going into sqp #2"<<std::endl;
         sqp_stats = sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, rho_reset);
+        break; //yana's check
 #else 
 	    sqp_stats = sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, rho_reset);
 #endif

@@ -17,13 +17,15 @@
 #include "merit.cuh"
 #include "gpu_pcg.cuh"
 #include "settings.cuh"
-#include "../BCHOL/SRI-23/helpf.cuh" //do I need it?
-#include "../BCHOL/SRI-23/solve.cuh"
+#include "../BCHOL/src/helpf.cuh" //do I need it?
+#include "../BCHOL/src/solve.cuh"
 // timing
 
 template <typename T>
 auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const uint32_t knot_points, float timestep, T *d_eePos_traj, T *d_lambda, T *d_xu, void *d_dynMem_const, pcg_config<T> &config, T &rho, T rho_reset)
 {
+
+    std::cout << "launching sqp" << std::endl;
 
     // data storage
     std::vector<int> pcg_iter_vec;
@@ -103,8 +105,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
 
     T *d_merit_initial, *d_merit_news, *d_merit_temp,
         *d_G_dense, *d_C_dense, *d_g, *d_c, *d_Ginv_dense,
-        *d_S, *d_gamma,
-        *d_dz,
+        *d_S, *d_gamma, *d_dz,
         *d_xs;
 
     T drho = 1.0;
@@ -254,9 +255,43 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
         gpuErrchk(cudaPeekAtLastError());
         /////////////YANA's EXPERIMENT until here worked fine/////////////////////
 
+        //d doesn't make solution go to null
+        //setting R to 0 makes it go to NaN, even one R
+
         // call kernel
         // std::cout << "Launching blocks " << bchol_gridSize << " launching threads" << bchol_blockSize << "shared memory" << bchol_shared_mem_size << std::endl;
+        // Copy from GPU to CPU to check before launching BCHOL
+        float *d = (float *)malloc(KKT_c_SIZE_BYTES);
+        float *q_r=(float *)malloc(KKT_g_SIZE_BYTES);
+        float *Q_R =(float *)malloc(KKT_G_DENSE_SIZE_BYTES);
+        float *A_B=(float *)malloc(KKT_C_DENSE_SIZE_BYTES);
 
+        gpuErrchk(cudaMemcpy(q_r, d_g, KKT_g_SIZE_BYTES, cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(d, d_c, KKT_c_SIZE_BYTES, cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(Q_R, d_G_dense, KKT_G_DENSE_SIZE_BYTES, cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(A_B, d_C_dense, KKT_C_DENSE_SIZE_BYTES, cudaMemcpyDeviceToHost));
+
+        // // print out the init:
+        // //////////////////////////////////
+        for (int i = 0; i < knot_points - 1; i++)
+        {
+            printf("A %d\n", i);
+            printMatrix(A_B + (i * (states_sq+states_p_controls)), state_size, state_size);
+            printf("B %d\n", i);
+            printMatrix(A_B + states_sq + (i * (states_sq+states_p_controls)), state_size, control_size);
+        }
+        for (int i = 0; i < knot_points; i++)
+        {
+            printf("Q %d\n", i);
+            printMatrix(Q_R + (i * (states_sq+controls_sq)), state_size, state_size);
+            if (i != knot_points - 1)
+            {
+                printf("R %d\n", i);
+                printMatrix(Q_R + states_sq + (i * state_size+controls_sq), control_size, control_size);
+            }
+        }
+        print_soln(d, q_r, knot_points, state_size, control_size);
+        ////////////////////////////////////////////////
         // Get device properties
         cudaDeviceProp prop;
         cudaGetDeviceProperties(&prop, 0); // Assuming you're using device 0
@@ -275,16 +310,16 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
         {
             std::cerr << "Device does not support 96 KB shared memory per block." << std::endl;
         }
+
         // Calculate max blocks for cooperative launch
         int numBlocksPerSm;
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, bchol_kernelFunc, bchol_blockSize, bchol_shared_mem_size);
         int maxBlocks = numBlocksPerSm * prop.multiProcessorCount;
         std::cout << "Max blocks for cooperative kernel launch: " << maxBlocks << std::endl;
-
-        gpuErrchk(cudaDeviceSynchronize());
-        gpuErrchk(cudaLaunchCooperativeKernel(bchol_kernelFunc, bchol_gridSize, bchol_blockSize, bcholKernelArgs, bchol_shared_mem_size));
-        gpuErrchk(cudaDeviceSynchronize());
-        gpuErrchk(cudaPeekAtLastError());
+        // gpuErrchk(cudaDeviceSynchronize());
+        // gpuErrchk(cudaLaunchCooperativeKernel(bchol_kernelFunc, bchol_gridSize, bchol_blockSize, bcholKernelArgs, bchol_shared_mem_size));
+        // gpuErrchk(cudaDeviceSynchronize());
+        // gpuErrchk(cudaPeekAtLastError());
         // maybe add write_solution?
 
         /////YANA'S Experiment////////////////////////
@@ -320,8 +355,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
         }
         clock_gettime(CLOCK_MONOTONIC, &linsys_start);
 #endif // #if TIME_LINSYS
-       // std::cout << "my shared mem " << bchol_shared_mem_size << std::endl;
-       // std::cout << "Emre's shared mem " << ppcg_kernel_smem_size << std::endl;
+
         gpuErrchk(cudaLaunchCooperativeKernel(pcg_kernel, knot_points, PCG_NUM_THREADS, pcgKernelArgs, ppcg_kernel_smem_size));
         gpuErrchk(cudaMemcpy(&pcg_iters, d_pcg_iters, sizeof(uint32_t), cudaMemcpyDeviceToHost));
         gpuErrchk(cudaMemcpy(&pcg_exit, d_pcg_exit, sizeof(bool), cudaMemcpyDeviceToHost));
@@ -358,6 +392,8 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
         {
             break;
         }
+
+        break;
 
         // line search
         for (uint32_t p = 0; p < num_alphas; p++)
@@ -454,6 +490,8 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
 
         h_merit_initial = min_merit;
     }
+
+    std::cout << "exited the loop" << std::endl;
 
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());
