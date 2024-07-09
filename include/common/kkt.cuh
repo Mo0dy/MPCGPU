@@ -69,6 +69,7 @@ __global__ void generate_kkt_submatrices(uint32_t state_size,
     T *s_rk = s_qk + state_size;
     T *s_end = s_rk + control_size;
 
+
     for (unsigned k = block_id; k < knot_points - 1; k += num_blocks)
     {
 
@@ -163,20 +164,7 @@ __global__ void generate_kkt_submatrices(uint32_t state_size,
                                                           d_dynMem_const);
             __syncthreads();
 
-            // // Yana's check
-            // if (thread_id == 0 && block_id == 0)
-            // {
-            //     printf("Checking kkt generation! %d\n", k);
-            //     print_Matrix(s_integrator_error + (k * state_size), state_size, 1);
-            // }
 
-            // Yana's check for Q_R
-            if (thread_id == 0 && block_id == 0)
-            {
-                printf("Checking R generation! %d\n", k);
-                print_Matrix(s_integrator_error, state_size, control_size);
-                
-            }
 
             glass::copy<T>(states_sq, s_Qk, &d_G_dense[(states_sq + controls_sq) * k]);
             glass::copy<T>(controls_sq, s_Rk, &d_G_dense[(states_sq + controls_sq) * k + states_sq]);
@@ -185,23 +173,8 @@ __global__ void generate_kkt_submatrices(uint32_t state_size,
             glass::copy<T>(states_sq, static_cast<T>(-1), s_Ak, &d_C_dense[(states_sq + states_p_controls) * k]);
             glass::copy<T>(states_p_controls, static_cast<T>(-1), s_Bk, &d_C_dense[(states_sq + states_p_controls) * k + states_sq]);
             glass::copy<T>(state_size, s_integrator_error, &d_c[state_size * (k + 1)]);
-            // if (thread_id == 0 && block_id == 1)
-            // {
-            //     printf("Checking kkt generation 2 %d\n", k);
-            //     print_Matrix(&d_c[state_size * (k + 1)], state_size, 1);
-            //     print_Matrix(s_integrator_error, state_size, 1);
-            // }
+
+
         }
     }
-    // check the init
-
-    // if (thread_id == 0 && block_id == 0)
-    // {
-    //     printf(" %f", d_c[0]);
-    //     for (int i = 0; i < knot_points; i++)
-    //     {
-    //         printf("Checking kkt generation %d\n", i);
-    //         print_Matrix(d_c + (i * state_size), state_size, 1);
-    //     }
-    // }
 }
