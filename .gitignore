@@ -3,3 +3,6 @@
 *.exe
 *.o
 *.so
+examples/data
+tmp/
+.idea/
