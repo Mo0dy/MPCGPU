@@ -271,7 +271,7 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
 
         // save -Q0^{-1}q0 in spot 0 in gamma
         for(unsigned ind = threadIdx.x; ind < state_size; ind += blockDim.x){
-            d_gamma[ind] = -s_Q0[ind];
+            d_gamma[ind] = -s_Q0[ind] + d_c[ind];
         }
         __syncthreads();//----------------------------------------------------------------
 
