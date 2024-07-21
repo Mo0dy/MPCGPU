@@ -2,7 +2,7 @@
 #include <cstdint>
 // TODO: GBD-PCG utils include fix
 #include "utils.cuh"
-
+#include "utils_block.cuh"
     
 
 

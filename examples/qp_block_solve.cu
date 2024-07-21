@@ -4,7 +4,7 @@
 #include "gpuassert.cuh"
 #include "read_array.h"
 #include <ctime>
-#include "pcg/qp.cuh"
+#include "pcg/qp_block.cuh"
 #include <tuple>
 
 #define tic      double tic_t = clock();
@@ -45,13 +45,13 @@ int main() {
 
     struct pcg_config<float> config;
     std::tuple<uint32_t, double, double> qp_stats;
-    qp_stats = qpSolvePcg(state_size, control_size, knot_points,
-                          h_G_dense,
-                          h_C_dense,
-                          h_g,
-                          h_c,
-                          h_dz,
-                          config);
+    qp_stats = qpBlockSolvePcg(state_size, control_size, knot_points,
+                               h_G_dense,
+                               h_C_dense,
+                               h_g,
+                               h_c,
+                               h_dz,
+                               config);
     uint32_t pcg_iters = std::get<0>(qp_stats);
 
     std::cout << "PCG iteration number: " << pcg_iters << std::endl;
@@ -66,13 +66,13 @@ int main() {
     double linsys_time_total = 0;
     double qp_solve_time_total = 0;
     for (int i = 0; i < iteration; i++) {
-        qp_stats = qpSolvePcg(state_size, control_size, knot_points,
-                              h_G_dense,
-                              h_C_dense,
-                              h_g,
-                              h_c,
-                              h_dz,
-                              config);
+        qp_stats = qpBlockSolvePcg(state_size, control_size, knot_points,
+                                   h_G_dense,
+                                   h_C_dense,
+                                   h_g,
+                                   h_c,
+                                   h_dz,
+                                   config);
         double linsys_time = std::get<1>(qp_stats);
         double qp_solve_time = std::get<2>(qp_stats);
         linsys_time_total += linsys_time;
@@ -82,7 +82,6 @@ int main() {
               << " us (1e-6) microseconds. " << std::endl;
     std::cout << "QP time avg in " << iteration << " iterations: " << qp_solve_time_total / iteration
               << " us (1e-6) microseconds. " << std::endl;
-
     return 0;
 }
 
