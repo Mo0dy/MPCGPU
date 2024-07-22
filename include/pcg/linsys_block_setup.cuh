@@ -159,7 +159,10 @@ complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
 //      diagonal blocks of d_Pinv
 //      all of d_gamma, d_T
 
-template<typename T>
+// if DECOMPOSITION_SQUARE_ROOT, use chol
+// if !DECOMPOSITION_SQUARE_ROOT, use LDL'
+
+template<typename T, bool DECOMPOSITION_SQUARE_ROOT>
 __device__
 void
 form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t control_size, uint32_t knot_points,
@@ -217,10 +220,20 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
 
         // Attention: loading of Q0 and computation of gamma_k is finished
 
-        // do LDL' here on s_theta_k = s_Q0_i = D_0 = D_k
-        glass::ldl_InPlace<T>(state_size, s_Q0_i, s_D_k);
+        // do Cholesky or LDL' here on s_theta_k = s_Q0_i = D_0 = D_k
         // note: s_Q0_i is dense but its lower triangular part is Lk = L0
         // note: s_D_k = \tilde{D}_k is diagonal
+        if (DECOMPOSITION_SQUARE_ROOT) {
+            // Cholesky, with square root
+            glass::chol_InPlace<T>(state_size, s_Q0_i);
+            // s_D_k identity
+            for (unsigned i = threadIdx.x; i < state_size; i += blockDim.x) {
+                s_D_k[i] = static_cast<T>(1);
+            }
+        } else {
+            // square root free Cholesky = LDL'
+            glass::ldl_InPlace<T>(state_size, s_Q0_i, s_D_k);
+        }
 
         // save s_D_k = \tilde{D}_k to main diagonal S
         store_block_db<T>(state_size, knot_points,
@@ -407,11 +420,22 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
 
         // Attention: computation of phi_k, theta_k, gamma_k is finished
 
-        // do LDL' here on s_theta_k = D_k
         __syncthreads();//----------------------------------------------------------------
-        glass::ldl_InPlace<T>(state_size, s_theta_k, s_D_k);
+        // do Cholesky or LDL' here on s_theta_k = D_k
         // note: s_theta_k is dense but its lower triangular part is Lk
         // note: s_D_k = \tilde{D}_k is diagonal
+
+        if (DECOMPOSITION_SQUARE_ROOT) {
+            // Cholesky, with square root
+            glass::chol_InPlace<T>(state_size, s_theta_k);
+            // s_D_k identity
+            for (unsigned i = threadIdx.x; i < state_size; i += blockDim.x) {
+                s_D_k[i] = static_cast<T>(1);
+            }
+        } else {
+            // square root free Cholesky = LDL'
+            glass::ldl_InPlace<T>(state_size, s_theta_k, s_D_k);
+        }
 
         // save s_D_k = \tilde{D}_k to main diagonal S
         store_block_db<T>(state_size, knot_points,
@@ -497,7 +521,7 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
 }
 
 
-template<typename T>
+template<typename T, bool DECOMPOSITION_SQUARE_ROOT>
 __global__
 void form_S_gamma_Pinv_block_kernel(
         uint32_t state_size,
@@ -519,7 +543,7 @@ void form_S_gamma_Pinv_block_kernel(
     extern __shared__ T s_temp[];
 
     for (unsigned blockrow = blockIdx.x; blockrow < knot_points; blockrow += gridDim.x) {
-        form_S_gamma_and_jacobi_Pinv_block_blockrow<T>(
+        form_S_gamma_and_jacobi_Pinv_block_blockrow<T, DECOMPOSITION_SQUARE_ROOT>(
                 state_size,
                 control_size,
                 knot_points,
@@ -605,7 +629,7 @@ void transform_lamdba(uint32_t state_size,
     );
 }
 
-template<typename T>
+template<typename T, bool DECOMPOSITION_SQUARE_ROOT>
 void form_schur_system_block(
         uint32_t state_size,
         uint32_t control_size,
@@ -630,7 +654,7 @@ void form_schur_system_block(
                                               2 * control_size * control_size +
                                               3);
 
-    void *kernel = (void *) form_S_gamma_Pinv_block_kernel<T>;
+    void *kernel = (void *) form_S_gamma_Pinv_block_kernel<T, DECOMPOSITION_SQUARE_ROOT>;
     void *args[] = {
             (void *) &state_size,
             (void *) &control_size,

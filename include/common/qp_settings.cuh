@@ -31,7 +31,12 @@ typedef float linsys_t;
  *******************************************************************************/
 
 #ifndef PCG_NUM_THREADS
-#define PCG_NUM_THREADS	128
+#define PCG_NUM_THREADS    128
+#endif
+
+// only for transformed schur and pcg
+#ifndef CHOL_OR_LDL
+#define CHOL_OR_LDL    false
 #endif
 
 
@@ -39,7 +44,7 @@ typedef float linsys_t;
 LINSYS_SOLVE = 0 uses qdldl as the underlying linear system solver */
 
 #ifndef LINSYS_SOLVE
-#define LINSYS_SOLVE 1 
+#define LINSYS_SOLVE 1
 #endif
 
 #ifndef PCG_MAX_ITER
@@ -53,11 +58,11 @@ LINSYS_SOLVE = 0 uses qdldl as the underlying linear system solver */
 
 #ifndef SCHUR_THREADS
 #define SCHUR_THREADS       64
-#endif 
+#endif
 
 #ifndef DZ_THREADS
 #define DZ_THREADS          64
-#endif 
+#endif
 
 #ifndef KKT_THREADS
 #define KKT_THREADS         64

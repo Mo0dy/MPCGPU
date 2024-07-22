@@ -19,7 +19,7 @@
 
 #define time_delta_us_timespec(start, end) (1e6*static_cast<double>(end.tv_sec - start.tv_sec)+1e-3*static_cast<double>(end.tv_nsec - start.tv_nsec))
 
-template<typename T>
+template<typename T, bool DECOMPOSITION_SQUARE_ROOT>
 auto qpBlockSolvePcg(const uint32_t state_size, const uint32_t control_size, const uint32_t knot_points,
                      T *h_G_dense,
                      T *h_C_dense,
@@ -121,7 +121,7 @@ auto qpBlockSolvePcg(const uint32_t state_size, const uint32_t control_size, con
 
     // form the Schur complement system (S, Pinv, gamma) from
     // the given KKT matrix (G_dense, C_dense, g, c)
-    form_schur_system_block<T>(
+    form_schur_system_block<T, DECOMPOSITION_SQUARE_ROOT>(
             state_size,
             control_size,
             knot_points,

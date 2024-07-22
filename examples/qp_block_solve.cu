@@ -45,13 +45,13 @@ int main() {
 
     struct pcg_config<float> config;
     std::tuple<uint32_t, double, double> qp_stats;
-    qp_stats = qpBlockSolvePcg(state_size, control_size, knot_points,
-                               h_G_dense,
-                               h_C_dense,
-                               h_g,
-                               h_c,
-                               h_dz,
-                               config);
+    qp_stats = qpBlockSolvePcg<float, CHOL_OR_LDL>(state_size, control_size, knot_points,
+                                                   h_G_dense,
+                                                   h_C_dense,
+                                                   h_g,
+                                                   h_c,
+                                                   h_dz,
+                                                   config);
     uint32_t pcg_iters = std::get<0>(qp_stats);
 
     std::cout << "PCG iteration number: " << pcg_iters << std::endl;
@@ -62,17 +62,17 @@ int main() {
     }
     std::cout << "dz norm: " << sqrt(norm) << std::endl;
 
-    int iteration = 100;
+    int iteration = 1000;
     double linsys_time_total = 0;
     double qp_solve_time_total = 0;
     for (int i = 0; i < iteration; i++) {
-        qp_stats = qpBlockSolvePcg(state_size, control_size, knot_points,
-                                   h_G_dense,
-                                   h_C_dense,
-                                   h_g,
-                                   h_c,
-                                   h_dz,
-                                   config);
+        qp_stats = qpBlockSolvePcg<float, CHOL_OR_LDL>(state_size, control_size, knot_points,
+                                                       h_G_dense,
+                                                       h_C_dense,
+                                                       h_g,
+                                                       h_c,
+                                                       h_dz,
+                                                       config);
         double linsys_time = std::get<1>(qp_stats);
         double qp_solve_time = std::get<2>(qp_stats);
         linsys_time_total += linsys_time;
