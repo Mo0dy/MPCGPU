@@ -14,7 +14,6 @@
 
 #include "qp_settings.cuh"
 #include "linsys_block_setup.cuh"
-#include "common/dz.cuh"
 #include "gpu_pcg.cuh"
 
 #define time_delta_us_timespec(start, end) (1e6*static_cast<double>(end.tv_sec - start.tv_sec)+1e-3*static_cast<double>(end.tv_nsec - start.tv_nsec))

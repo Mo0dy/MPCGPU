@@ -5,6 +5,7 @@
 #include "read_array.h"
 #include <ctime>
 #include "pcg/qp_block.cuh"
+#include "pcg/qp.cuh"
 #include <tuple>
 
 #define tic      double tic_t = clock();
@@ -37,44 +38,58 @@ int main() {
     readArrayFromFile(KKT_g_SIZE, "data/g.txt", h_g);
     readArrayFromFile(KKT_c_SIZE, "data/c.txt", h_c);
 
-    float h_dz[DZ_SIZE];
-    // set zeros to dz. Not necessary.
-    for (uint32_t i = 0; i < DZ_SIZE; i++) {
-        h_dz[i] = 0;
-    }
+    float h_dz_trans[DZ_SIZE];
+    float h_dz_org[DZ_SIZE];
 
     struct pcg_config<float> config;
-    std::tuple<uint32_t, double, double> qp_stats;
-    qp_stats = qpBlockSolvePcg<float, CHOL_OR_LDL>(state_size, control_size, knot_points,
-                                                   h_G_dense,
-                                                   h_C_dense,
-                                                   h_g,
-                                                   h_c,
-                                                   h_dz,
-                                                   config);
-    uint32_t pcg_iters = std::get<0>(qp_stats);
+    std::tuple<uint32_t, double, double> qp_trans_stats, qp_org_stats;
+    qp_org_stats = qpSolvePcg<float>(state_size, control_size, knot_points,
+                                     h_G_dense,
+                                     h_C_dense,
+                                     h_g,
+                                     h_c,
+                                     h_dz_org,
+                                     config);
 
-    std::cout << "PCG iteration number: " << pcg_iters << std::endl;
+    qp_trans_stats = qpBlockSolvePcg<float, CHOL_OR_LDL>(state_size, control_size, knot_points,
+                                                         h_G_dense,
+                                                         h_C_dense,
+                                                         h_g,
+                                                         h_c,
+                                                         h_dz_trans,
+                                                         config);
+    uint32_t pcg_org_iters = std::get<0>(qp_org_stats);
+    uint32_t pcg_trans_iters = std::get<0>(qp_trans_stats);
 
-    float norm = 0;
+    std::cout << "Original PCG iteration number: " << pcg_org_iters << std::endl;
+    std::cout << "Transformed PCG iteration number: " << pcg_trans_iters << std::endl;
+
+    float norm_org = 0;
+    float norm_trans = 0;
+    float diff = 0;
     for (uint32_t i = 0; i < DZ_SIZE; i++) {
-        norm += h_dz[i] * h_dz[i];
+        norm_org += h_dz_org[i] * h_dz_org[i];
+        norm_trans += h_dz_trans[i] * h_dz_trans[i];
+        diff += (h_dz_org[i] - h_dz_trans[i]) * (h_dz_org[i] - h_dz_trans[i]);
     }
-    std::cout << "dz norm: " << sqrt(norm) << std::endl;
+    std::cout << "Original dz norm: " << sqrt(norm_org) << std::endl;
+    std::cout << "Transformed dz norm: " << sqrt(norm_trans) << std::endl;
+    std::cout << "dz norm difference: " << sqrt(diff) << std::endl;
+
 
     int iteration = 1000;
     double linsys_time_total = 0;
     double qp_solve_time_total = 0;
     for (int i = 0; i < iteration; i++) {
-        qp_stats = qpBlockSolvePcg<float, CHOL_OR_LDL>(state_size, control_size, knot_points,
-                                                       h_G_dense,
-                                                       h_C_dense,
-                                                       h_g,
-                                                       h_c,
-                                                       h_dz,
-                                                       config);
-        double linsys_time = std::get<1>(qp_stats);
-        double qp_solve_time = std::get<2>(qp_stats);
+        qp_trans_stats = qpBlockSolvePcg<float, CHOL_OR_LDL>(state_size, control_size, knot_points,
+                                                             h_G_dense,
+                                                             h_C_dense,
+                                                             h_g,
+                                                             h_c,
+                                                             h_dz_trans,
+                                                             config);
+        double linsys_time = std::get<1>(qp_trans_stats);
+        double qp_solve_time = std::get<2>(qp_trans_stats);
         linsys_time_total += linsys_time;
         qp_solve_time_total += qp_solve_time;
     }

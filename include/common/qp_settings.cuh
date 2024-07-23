@@ -67,3 +67,5 @@ LINSYS_SOLVE = 0 uses qdldl as the underlying linear system solver */
 #ifndef KKT_THREADS
 #define KKT_THREADS         64
 #endif
+
+#include "common/dz.cuh"
