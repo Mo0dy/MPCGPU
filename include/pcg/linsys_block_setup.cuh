@@ -260,7 +260,7 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
             s_D_k[i] = static_cast<T>(1) / s_D_k[i];
         }
 
-        // save -inv(\tilde{D}_k) to main diagonal Pinv
+        // save inv(\tilde{D}_k) to main diagonal Pinv
         __syncthreads();//----------------------------------------------------------------
         store_block_db<T>(state_size, knot_points,
                           s_D_k,
@@ -383,7 +383,7 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
             s_gamma_k[i] += s_extra_temp[state_size + i] + s_extra_temp[i];
         }
 
-        // compute -AQ^{-1}AT for theta
+        // compute AQ^{-1}AT for theta
         glass::gemm<T, true>(
                 state_size,
                 state_size,
@@ -400,7 +400,7 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
             s_theta_k[i] += s_Qkp1_i[i];
         }
 
-        // compute -BR^{-1}BT for theta            temp storage in QKp1{-1}
+        // compute BR^{-1}BT for theta            temp storage in QKp1{-1}
         __syncthreads();//----------------------------------------------------------------
         glass::gemm<T, true>(
                 state_size,
@@ -412,7 +412,7 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
                 s_Qkp1_i
         );
 
-        // add -BR^{-1}BT to theta
+        // add BR^{-1}BT to theta
         __syncthreads();//----------------------------------------------------------------
         for (unsigned i = threadIdx.x; i < state_size * state_size; i += blockDim.x) {
             s_theta_k[i] += s_Qkp1_i[i];
@@ -463,7 +463,7 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
             s_D_k[i] = static_cast<T>(1) / s_D_k[i];
         }
 
-        // save -inv(\tilde{D}_k) to main diagonal Pinv
+        // save inv(\tilde{D}_k) to main diagonal Pinv
         __syncthreads();//----------------------------------------------------------------
         store_block_db<T>(state_size, knot_points,
                           s_D_k,
@@ -493,7 +493,7 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
                           -1
         );
 
-        // transpose phi_k
+        // transpose (T_k * phi_k)
         loadIdentity<T>(state_size, s_Ak);
         __syncthreads();//----------------------------------------------------------------
         glass::gemm<T, true>(
@@ -502,13 +502,11 @@ form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t contro
                 state_size,
                 static_cast<T>(1.0),
                 s_Ak,
-                s_phi_k,
-                s_Qkp1
+                s_Qkp1,
+                s_phi_k
         );
 
         // save phi_k_T * T_k' into right off-diagonal of S
-        __syncthreads();//----------------------------------------------------------------
-        glass::trmm_right<T, true>(state_size, state_size, static_cast<T>(1), s_T_k, s_Qkp1, s_phi_k);
         __syncthreads();//----------------------------------------------------------------
         store_block_ob<T>(state_size, knot_points,
                           s_phi_k,                       // src
