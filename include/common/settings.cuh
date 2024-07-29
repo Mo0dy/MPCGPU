@@ -6,9 +6,9 @@
 #define KNOT_POINTS 32 
 #endif
 
-// default value is for iiwa arm 
+
 #ifndef STATE_SIZE
-#define STATE_SIZE  14
+#define STATE_SIZE  12 //Neuromeka Indy7
 #endif
 
 
