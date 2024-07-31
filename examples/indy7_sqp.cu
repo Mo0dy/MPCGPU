@@ -4,25 +4,23 @@
 #include <iostream>
 #include <tuple>
 #include <filesystem>
-#include "mpcsim.cuh"
 #include "dynamics/rbd_plant.cuh"
 #include "settings.cuh"
 #include "utils/experiment.cuh"
 #include "gpu_pcg.cuh"
+#include "pcg/sqp.cuh"
 
 
 int main(){
 
     constexpr uint32_t state_size = grid::NUM_JOINTS*2;
     constexpr uint32_t control_size = grid::NUM_JOINTS;
-    constexpr uint32_t knot_points = 32;
+    constexpr uint32_t knot_points = KNOT_POINTS;
     const linsys_t timestep = .015625;
     const uint32_t traj_length = (state_size + control_size) * knot_points - control_size;
 
     // checks GPU space for pcg
     checkPcgOccupancy<linsys_t>((void *) pcg<linsys_t, state_size, knot_points>, PCG_NUM_THREADS, state_size, knot_points);    
-
-    void *d_dynmem_const = gato_plant::initializeDynamicsConstMem<linsys_t>();
 
     pcg_config<linsys_t> config;
     config.pcg_block = PCG_NUM_THREADS; //128
@@ -60,8 +58,6 @@ int main(){
         for (const auto& xu_vec : xu_traj2d) { h_xu_traj.insert(h_xu_traj.end(), xu_vec.begin(), xu_vec.end()); }
 
         if(eePos_traj2d.size() < knot_points){ std::cout << "precomputed traj length < knotpoints, not implemented\n"; exit(1); }
-
-
         
         gpuErrchk(cudaMalloc(&d_eePos_traj, 6 * knot_points * sizeof(linsys_t)));
         gpuErrchk(cudaMemcpy(d_eePos_traj, h_eePos_traj.data(), 6 * knot_points * sizeof(linsys_t), cudaMemcpyHostToDevice)); // initialize with start of trajectory
@@ -71,9 +67,10 @@ int main(){
 
         gpuErrchk(cudaMalloc(&d_lambda, state_size * knot_points * sizeof(linsys_t)));
         gpuErrchk(cudaMemset(d_lambda, 0, state_size * knot_points * sizeof(linsys_t)));
-
         
-        sqp_stats = sqpSolvePcg<linsys_t>(state_size, control_size, 32, timestep, d_eePos_traj, d_lambda, d_xu, d_dynmem_const, config, rho, rho_reset);
+        void *d_dynmem_const = gato_plant::initializeDynamicsConstMem<linsys_t>();
+
+        sqp_stats = sqpSolvePcg<linsys_t>(state_size, control_size, knot_points, timestep, d_eePos_traj, d_lambda, d_xu, d_dynmem_const, config, rho, rho_reset);
 
         auto [pcg_iters, linsys_times, sqp_solve_time, sqp_iters, sqp_exit, pcg_exits] = sqp_stats;
 
@@ -90,6 +87,9 @@ int main(){
         for (int i = 0; i < linsys_times.size(); i++){
             printf("%f ", linsys_times[i]);
         }   
+        printf("\n");
+        printf("sqp exit: %d\n", sqp_exit);
+
         printf("\n");
 
         printf("freeing memory\n");
