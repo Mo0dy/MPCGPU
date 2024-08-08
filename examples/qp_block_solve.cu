@@ -45,13 +45,14 @@ int main() {
     config.pcg_org_trans = false;
     config.pcg_poly_order = 0;
     std::tuple<uint32_t, double, double> qp_trans_stats, qp_org_stats;
-    qp_org_stats = qpSolvePcg<double>(state_size, control_size, knot_points,
-                                      h_G_dense,
-                                      h_C_dense,
-                                      h_g,
-                                      h_c,
-                                      h_dz_org,
-                                      config);
+    qp_org_stats = qpBlockSolvePcg<double>(state_size, control_size, knot_points,
+                                           h_G_dense,
+                                           h_C_dense,
+                                           h_g,
+                                           h_c,
+                                           h_dz_org,
+                                           CHOL_OR_LDL,
+                                           config);
 
     config.pcg_org_trans = true;
     qp_trans_stats = qpBlockSolvePcg<double>(state_size, control_size, knot_points,
