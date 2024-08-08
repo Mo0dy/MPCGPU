@@ -18,13 +18,14 @@
 
 #define time_delta_us_timespec(start, end) (1e6*static_cast<double>(end.tv_sec - start.tv_sec)+1e-3*static_cast<double>(end.tv_nsec - start.tv_nsec))
 
-template<typename T, bool DECOMPOSITION_SQUARE_ROOT>
+template<typename T>
 auto qpBlockSolvePcg(const uint32_t state_size, const uint32_t control_size, const uint32_t knot_points,
                      T *h_G_dense,
                      T *h_C_dense,
                      T *h_g,
                      T *h_c,
                      T *h_dz,
+                     bool chol_or_ldl,
                      pcg_config <T> &config) {
 
     T rho = static_cast<T>(0.0);
@@ -84,7 +85,7 @@ auto qpBlockSolvePcg(const uint32_t state_size, const uint32_t control_size, con
 
     // form the Schur complement system (S, Pinv, gamma) from
     // the given KKT matrix (G_dense, C_dense, g, c)
-    form_schur_system_block<T, DECOMPOSITION_SQUARE_ROOT>(
+    form_schur_system_block<T>(
             state_size,
             control_size,
             knot_points,
@@ -98,7 +99,8 @@ auto qpBlockSolvePcg(const uint32_t state_size, const uint32_t control_size, con
             d_Pinv + state_size * knot_points,
             d_T,
             d_gamma,
-            rho
+            rho,
+            chol_or_ldl
     );
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());

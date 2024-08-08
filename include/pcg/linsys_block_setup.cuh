@@ -156,15 +156,15 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
 //      diagonal blocks of d_Pinv
 //      all of d_gamma, d_T
 
-// if DECOMPOSITION_SQUARE_ROOT, use chol
-// if !DECOMPOSITION_SQUARE_ROOT, use LDL'
+// if chol_or_ldl, use chol
+// if !chol_or_ldl, use LDL'
 
-template<typename T, bool DECOMPOSITION_SQUARE_ROOT>
+template<typename T>
 __device__
 void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t control_size, uint32_t knot_points,
                                                  T *d_G, T *d_C, T *d_g, T *d_c,
                                                  T *d_Sdb, T *d_Sob, T *d_Pinvdb, T *d_Pinvob, T *d_T, T *d_gamma,
-                                                 T rho, T *s_temp, unsigned blockrow) {
+                                                 T rho, T *s_temp, unsigned blockrow, bool chol_or_ldl) {
 
     // note: kkt.cuh stores Ak, Bk with minus sign, so the Ak, Bk here are actually -Ak, -Bk
 
@@ -218,7 +218,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         // do Cholesky or LDL' here on M2 = Q0_i
         // note: Q0_i is dense but its lower triangular part is L0
         // note: v1 = \tilde{D}_k is diagonal
-        if (DECOMPOSITION_SQUARE_ROOT) {
+        if (chol_or_ldl) {
             // Cholesky, with square root
             glass::chol_InPlace<T>(state_size, s_M2);
             // v1 identity
@@ -431,7 +431,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         // note: M4 is dense but its lower triangular part is Lk
         // note: v1 = \tilde{D}_k is a diagonal matrix
 
-        if (DECOMPOSITION_SQUARE_ROOT) {
+        if (chol_or_ldl) {
             // Cholesky, with square root
             glass::chol_InPlace<T>(state_size, s_M4);
             // v1 identity
@@ -528,22 +528,22 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
 }
 
 
-template<typename T, bool DECOMPOSITION_SQUARE_ROOT>
+template<typename T>
 __global__
 void form_S_gamma_Pinv_block_kernel(
         uint32_t state_size, uint32_t control_size, uint32_t knot_points,
         T *d_G, T *d_C, T *d_g, T *d_c,
         T *d_Sdb, T *d_Sob, T *d_Pinvdb, T *d_Pinvob, T *d_T, T *d_gamma,
-        T rho) {
+        T rho, bool chol_or_ldl) {
 
     extern __shared__ T s_temp[];
 
     for (unsigned blockrow = blockIdx.x; blockrow < knot_points; blockrow += gridDim.x) {
-        form_S_gamma_and_jacobi_Pinv_block_blockrow<T, DECOMPOSITION_SQUARE_ROOT>(
+        form_S_gamma_and_jacobi_Pinv_block_blockrow<T>(
                 state_size, control_size, knot_points,
                 d_G, d_C, d_g, d_c,
                 d_Sdb, d_Sob, d_Pinvdb, d_Pinvob, d_T, d_gamma,
-                rho, s_temp, blockrow);
+                rho, s_temp, blockrow, chol_or_ldl);
     }
     cgrps::this_grid().sync();
 
@@ -601,12 +601,12 @@ void transform_lamdba(uint32_t state_size, uint32_t knot_points,
             d_T, d_lambda);
 }
 
-template<typename T, bool DECOMPOSITION_SQUARE_ROOT>
+template<typename T>
 void form_schur_system_block(
         uint32_t state_size, uint32_t control_size, uint32_t knot_points,
         T *d_G_dense, T *d_C_dense, T *d_g, T *d_c,
         T *d_Sdb, T *d_Sob, T *d_Pinvdb, T *d_Pinvob, T *d_T, T *d_gamma,
-        T rho) {
+        T rho, bool chol_or_ldl) {
     // old shared block memory size                     7nx^2 + nx(nx+1)/2 + 8nx + nxnu + 3nu + 2nu^2 +3
     // form_S_gamma_and_jacobi_Pinv_block_blockrow      4nx^2 + 3nx + 1
     // complete_SS_Pinv_block_blockrow                  3nx^2 + nx(nx+1)/2 + 2nx
@@ -615,12 +615,12 @@ void form_schur_system_block(
     const uint32_t s_temp_size = sizeof(T) * (4 * state_size * state_size +
                                               3 * state_size + 1);
 
-    void *kernel = (void *) form_S_gamma_Pinv_block_kernel<T, DECOMPOSITION_SQUARE_ROOT>;
+    void *kernel = (void *) form_S_gamma_Pinv_block_kernel<T>;
     void *args[] = {
             (void *) &state_size, (void *) &control_size, (void *) &knot_points,
             (void *) &d_G_dense, (void *) &d_C_dense, (void *) &d_g, (void *) &d_c,
             (void *) &d_Sdb, (void *) &d_Sob, (void *) &d_Pinvdb, (void *) &d_Pinvob, (void *) &d_T, (void *) &d_gamma,
-            (void *) &rho
+            (void *) &rho, (void *) &chol_or_ldl
     };
 
     gpuErrchk(cudaLaunchCooperativeKernel(kernel, knot_points, SCHUR_THREADS, args, s_temp_size));
