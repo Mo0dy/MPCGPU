@@ -68,7 +68,7 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
                           d_Sob,        // dst
                           1,            // block column (0 or 1)
                           blockrow,     // blockrow
-                          -1            // negative
+                          1             // positive
         );
 
         // load s_DInv_kp1
@@ -92,7 +92,7 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
                           d_Pinvob,         // dst
                           1,                // block column (0 or 1)
                           blockrow,         // blockrow
-                          1                 // positive
+                          -1                // negative
         );
     }
 
@@ -120,7 +120,7 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
                           d_Sob,        // dst
                           0,            // block column (0 or 1)
                           blockrow,     // blockrow
-                          -1            // negative
+                          1             // positive
         );
 
         // load s_DInv_km1
@@ -144,7 +144,7 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
                           d_Pinvob,         // dst
                           0,                // block column (0 or 1)
                           blockrow,         // blockrow
-                          1                 // positive
+                          -1                // negative
         );
     }
 
@@ -494,35 +494,27 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
 
         // save M3 = Tk * phi_k into left off-diagonal of S
         store_block_ob<T>(state_size, knot_points,
-                          s_M3,                        // src
-                          d_Sob,                          // dst
-                          0,                              // col = 0 or 1
-                          blockrow,                       // blockrow
-                          -1
+                          s_M3,         // src
+                          d_Sob,        // dst
+                          0,            // col = 0 or 1
+                          blockrow,     // blockrow
+                          1             // positive
         );
 
         // load identity to M1
         loadIdentity<T>(state_size, s_M1);
         __syncthreads();
-        // M2 <- M1 * M3' = phi_k' * Tk'
-        glass::gemm<T, true>(
-                state_size,
-                state_size,
-                state_size,
-                static_cast<T>(1.0),
-                s_M1,
-                s_M3,
-                s_M2
-        );
+        // M2 <- M1 * M3' = I * (Tk * phi_k)' = phi_k' * Tk'
+        glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M3, s_M2);
 
         // save phi_k' * T_k' into right off-diagonal of S
         __syncthreads();
         store_block_ob<T>(state_size, knot_points,
-                          s_M2,                       // src
-                          d_Sob,                         // dst
-                          1,                             // col = 0 or 1
-                          blockrow - 1,                  // blockrow
-                          -1
+                          s_M2,         // src
+                          d_Sob,        // dst
+                          1,            // col = 0 or 1
+                          blockrow - 1, // blockrow
+                          1             // positive
         );
     }
 }

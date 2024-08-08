@@ -198,7 +198,7 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
         // | Q_N | . | q_N | Q_0 | . | q_0 | scatch
         
 
-        // save -Q_0 in PhiInv spot 00
+        // save Q_0 in PhiInv spot 00
         store_block_bd<T>(
             state_size,
             knot_points,
@@ -206,7 +206,7 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
             d_Pinv,                   // dst         
             1,                          // col
             blockrow,                    // blockrow
-            -1                          //  multiplier
+            1                          //  multiplier
         );
         __syncthreads();//----------------------------------------------------------------
 
@@ -245,13 +245,13 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
         __syncthreads();//----------------------------------------------------------------
         
 
-        // save -Q0_i in spot 00 in S
+        // save Q0_i in spot 00 in S
         store_block_bd<T>( state_size, knot_points,
             s_Q0_i,                         // src             
             d_S,                            // dst              
             1,                              // col   
             blockrow,                        // blockrow         
-            -1                              //  multiplier   
+            1                              //  multiplier
         );
         __syncthreads();//----------------------------------------------------------------
 
@@ -271,7 +271,7 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
 
         // save -Q0^{-1}q0 in spot 0 in gamma
         for(unsigned ind = threadIdx.x; ind < state_size; ind += blockDim.x){
-            d_gamma[ind] = -s_Q0[ind] + d_c[ind];
+            d_gamma[ind] = s_Q0[ind] - d_c[ind];
         }
         __syncthreads();//----------------------------------------------------------------
 
@@ -493,17 +493,17 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
             d_S,                            // dst             
             0,                              // col
             blockrow,                        // blockrow    
-            -1
+            1
         );
         __syncthreads();//----------------------------------------------------------------
 
-        // save -s_theta_k main diagonal S
+        // save s_theta_k main diagonal S
         store_block_bd<T>( state_size, knot_points,
             s_theta_k,                                               
             d_S,                                                 
             1,                                               
             blockrow,
-            -1                                             
+            1
         );          
         __syncthreads();//----------------------------------------------------------------
 
@@ -520,7 +520,7 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
             d_Pinv,
             1,
             blockrow,
-            -1
+            1
         );
 
         __syncthreads();//----------------------------------------------------------------
@@ -528,7 +528,7 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
         // save gamma_k in gamma
         for(unsigned ind = threadIdx.x; ind < state_size; ind += blockDim.x){
             unsigned offset = (blockrow)*state_size + ind;
-            d_gamma[offset] = s_gamma_k[ind]*-1;
+            d_gamma[offset] = s_gamma_k[ind];
         }
 
         __syncthreads();//----------------------------------------------------------------
@@ -553,7 +553,7 @@ void form_S_gamma_and_jacobi_Pinv_blockrow(uint32_t state_size, uint32_t control
             d_S,                            // dst             
             2,                              // col
             blockrow-1,                      // blockrow    
-            -1
+            1
         );
 
         __syncthreads();//----------------------------------------------------------------
