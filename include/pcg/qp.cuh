@@ -69,43 +69,10 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
     T *d_dz;
     gpuErrchk(cudaMalloc(&d_dz, DZ_SIZE_BYTES));
 
-    // pcg things
+    // preconditioner(s)
     T *d_Pinv;
     gpuErrchk(cudaMalloc(&d_Pinv, 3 * states_sq * knot_points * sizeof(T)));
-
-    /*   PCG vars   */
-    T *d_r, *d_p, *d_v_temp, *d_eta_new_temp;// *d_r_tilde, *d_upsilon;
-    gpuErrchk(cudaMalloc(&d_r, state_size * knot_points * sizeof(T)));
-    gpuErrchk(cudaMalloc(&d_p, state_size * knot_points * sizeof(T)));
-    gpuErrchk(cudaMalloc(&d_v_temp, knot_points * sizeof(T)));
-    gpuErrchk(cudaMalloc(&d_eta_new_temp, knot_points * sizeof(T)));
-
-    void *pcg_kernel = (void *) pcg<T, STATE_SIZE, KNOT_POINTS>;
-    uint32_t pcg_iters;
-    uint32_t *d_pcg_iters;
-    gpuErrchk(cudaMalloc(&d_pcg_iters, sizeof(uint32_t)));
-    bool pcg_exit;
-    bool *d_pcg_exit;
-    gpuErrchk(cudaMalloc(&d_pcg_exit, sizeof(bool)));
-
-    void *pcgKernelArgs[] = {
-            (void *) &d_S,
-            (void *) &d_Pinv,
-            (void *) &d_gamma,
-            (void *) &d_lambda,
-            (void *) &d_r,
-            (void *) &d_p,
-            (void *) &d_v_temp,
-            (void *) &d_eta_new_temp,
-            (void *) &d_pcg_iters,
-            (void *) &d_pcg_exit,
-            (void *) &config.pcg_max_iter,
-            (void *) &config.pcg_exit_tol
-    };
-    size_t ppcg_kernel_smem_size = pcgSharedMemSize<T>(state_size, knot_points);
-
-    gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaDeviceSynchronize());
+    T *d_I_H = NULL;
 
     struct timespec linsys_start, linsys_end;
     double linsys_time;
@@ -131,13 +98,14 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
     // start linear system solver timer
     clock_gettime(CLOCK_MONOTONIC, &linsys_start);
 
-    gpuErrchk(cudaLaunchCooperativeKernel(pcg_kernel, knot_points, PCG_NUM_THREADS, pcgKernelArgs,
-                                          ppcg_kernel_smem_size));
-    gpuErrchk(cudaMemcpy(&pcg_iters, d_pcg_iters, sizeof(uint32_t), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(&pcg_exit, d_pcg_exit, sizeof(bool), cudaMemcpyDeviceToHost));
-
-    gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaDeviceSynchronize());
+    uint32_t pcg_iters = solvePCG<T>(d_S,
+                                     d_Pinv,
+                                     d_I_H,
+                                     d_gamma,
+                                     d_lambda,
+                                     state_size,
+                                     knot_points,
+                                     &config);
 
     // stop linear system solver timer
     clock_gettime(CLOCK_MONOTONIC, &linsys_end);
@@ -170,15 +138,10 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
     gpuErrchk(cudaFree(d_g));
     gpuErrchk(cudaFree(d_c));
     gpuErrchk(cudaFree(d_S));
+    gpuErrchk(cudaFree(d_Pinv));
+    gpuErrchk(cudaFree(d_lambda));
     gpuErrchk(cudaFree(d_gamma));
     gpuErrchk(cudaFree(d_dz));
-    gpuErrchk(cudaFree(d_pcg_iters));
-    gpuErrchk(cudaFree(d_pcg_exit));
-    gpuErrchk(cudaFree(d_Pinv));
-    gpuErrchk(cudaFree(d_r));
-    gpuErrchk(cudaFree(d_p));
-    gpuErrchk(cudaFree(d_v_temp));
-    gpuErrchk(cudaFree(d_eta_new_temp));
 
     return std::make_tuple(pcg_iters, linsys_time, qp_solve_time);
 }

@@ -100,20 +100,21 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
 
     [D, O, S] = formKKTSchur(A, B, Q, R, N);
     P = formPreconditionerSS(D, O, N, nx);
+%     disp('S original')
 %     disp(S)
     % plotSpectrum(P, S)
 
     [D_t_ldl, O_t_ldl, S_t_ldl, T_ldl] = preprocessSLDL(D, O, N, nx);
     [D_t_chol, O_t_chol, S_t_chol, T_chol] = preprocessSChol(D, O, N, nx);
-%     disp('S_t')
-%     disp(S_t)
+%     disp('S_t_ldl')
+%     disp(S_t_ldl)
 %     for i=1:N
-%        disp(T{i})
+%        disp(T_ldl{i})
 %     end
     P_t_ldl = formPreconditionerSS(D_t_ldl, O_t_ldl, N, nx);
     P_t_chol = formPreconditionerSS(D_t_chol, O_t_chol, N, nx);
-%     disp('P_t')
-%     disp(P_t)
+%     disp('P_t_ldl')
+%     disp(P_t_ldl)
     % plotSpectrum(P_t, S_t)
     
     N = N-1;
@@ -146,6 +147,8 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
     G_dense(N*nG+1:N*nG+nx^2, 1) = Q{end}(:);
 
     gamma = c + C*inv(G)*g;
+%     disp('gamma original ')
+%     disp(gamma)
     N = N + 1;
     gamma_t_ldl = zeros(N*nx, 1);
     for i=1:N
@@ -155,7 +158,7 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
     for i=1:N
         gamma_t_chol(1+(i-1)*nx:i*nx,1) = T_chol{i}*gamma(1+(i-1)*nx:i*nx,1);
     end
-%     disp(gamma_t)
+%     disp(gamma_t_ldl)
 
     lam_gt = S \ gamma;
     max_iter_lin = 1e4;
@@ -313,8 +316,8 @@ function [lambda, i] = PCG(Pinv, S, gamma, lambda_0, tol, max_iter)
        r_tilde = Pinv*r;
        nu_prime = r'*r_tilde;
        % different exiting conditions
-       if abs(nu_prime) < tol
-%        if norm(r)/norm(gamma) < tol
+%        if abs(nu_prime) < tol
+       if norm(r)/norm(gamma) < tol
           break
        end
        beta = nu_prime / nu;

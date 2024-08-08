@@ -22,16 +22,16 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
     // shared block memory usage: 3nx^2 + nx(nx+1)/2 + 2nx
 
     T *s_T_k = s_temp;
-    T *s_T_km1 = s_T_k;                         // T_k and T_km1 share the same memory
+    T *s_T_km1 = s_T_k;                         // T_k and T_km1 share (nx+1)nx/2
     T *s_phi_k = s_T_km1 + triangular_state;
-    T *s_phi_kp1_T = s_phi_k;                   // phi_k and phi_kp1_T share the same memory
+    T *s_phi_kp1_T = s_phi_k;                   // phi_k and phi_kp1_T share nx^2
     T *s_O_k = s_phi_kp1_T + states_sq;
-    T *S_O_km1_T = s_O_k;                       // O_k and O_km1_T share the same memory
+    T *S_O_km1_T = s_O_k;                       // O_k and O_km1_T share nx^2
     T *s_DInv_k = S_O_km1_T + states_sq;
-    T *s_DInv_km1 = s_DInv_k + state_size;      // DInv_k is not shared
-    T *s_DInv_kp1 = s_DInv_km1;                 // DInv_km1 and DInv_kp1 share the same memory
+    T *s_DInv_km1 = s_DInv_k + state_size;      // DInv_k is not shared, size = nx
+    T *s_DInv_kp1 = s_DInv_km1;                 // DInv_km1 and DInv_kp1 share nx
     T *s_PhiInv_k_R = s_DInv_kp1 + state_size;
-    T *s_PhiInv_k_L = s_PhiInv_k_R;             // PhiInv_k_R and PhiInv_k_L share the same memory
+    T *s_PhiInv_k_L = s_PhiInv_k_R;             // PhiInv_k_R and PhiInv_k_L share nx^2
     T *s_scratch = s_PhiInv_k_L + states_sq;
 
     const unsigned lastrow = knot_points - 1;
@@ -59,7 +59,7 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
         );
 
         // compute s_O_k
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         glass::trmm_left<T, false>(state_size, state_size, static_cast<T>(1), s_T_k, s_phi_kp1_T, s_O_k);
 
         // save s_O_k to S (right diagonal)
@@ -78,7 +78,7 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
                          blockrow + 1   // blockrow
         );
 
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
 
         // calculate right diag in Pinv
         // no need to __syncthreads() between 2 dimm because s_DInv_k & s_DInv_kp1 are both diagonal so order doesn't matter
@@ -111,7 +111,7 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
         );
 
         // compute s_O_km1_T
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         glass::trmm_right<T, true>(state_size, state_size, static_cast<T>(1), s_T_km1, s_phi_k, S_O_km1_T);
 
         // save s_O_km1_T to S (left diagonal)
@@ -130,7 +130,7 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
                          blockrow - 1   // blockrow
         );
 
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
 
         // compute left off diag for Pinv
         // no need to __syncthreads() between 2 dimm because s_DInv_k & s_DInv_km1 are both diagonal so order doesn't matter
@@ -191,12 +191,12 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
 
         // load Q0 to M1
         glass::copy<T>(state_sq, d_G, s_M1);
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         add_identity(s_M1, state_size, rho);
 
         // invert M1 = Q0, M2 <- inv(M1) = Q0_i
         loadIdentity<T>(state_size, s_M2);
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         invertMatrix<T>(state_size, s_M1, s_v1);
 
         // load q0 to v1
@@ -204,7 +204,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
 
         // compute Q0^{-1}q0  - IntegratorError in gamma
         // v2 <- M2 * v1 = Q0_i * q0
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         mat_vec_prod<T>(state_size, state_size, s_M2, s_v1, s_v2);
 
         // v2 <- v2 - d_c = Q0_i * q0 - d_c
@@ -241,11 +241,11 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         // invert the unit lower triangular L0
         // T0 = M3 <- inv(M2) = inv(L0)
         glass::loadIdentityTriangular<T>(state_size, s_M3);
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         glass::trsm_triangular<T, true>(state_size, s_M2, s_M3);
 
         // save M3 = T0 to d_T
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         for (unsigned ind = threadIdx.x; ind < triangular_state; ind += blockDim.x) {
             d_T[ind] = s_M3[ind];
         }
@@ -256,7 +256,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         }
 
         // save v1 = inv(\tilde{D}_0) to main diagonal Pinv
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         store_block_db<T>(state_size, knot_points,
                           s_v1,
                           d_Pinvdb,
@@ -268,7 +268,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         glass::trmv<T, false>(state_size, static_cast<T>(1), s_M3, s_v2, s_v3);
 
         // save v3 = T0 * gamma_0 in gamma
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         for (unsigned ind = threadIdx.x; ind < state_size; ind += blockDim.x) {
             d_gamma[ind] = s_v3[ind];
         }
@@ -426,7 +426,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         //            M1 = -Ak * QK_i = phi_k
         // Attention: computation of phi_k, theta_k, gamma_k is finished
 
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         // do Cholesky or LDL' here on M4
         // note: M4 is dense but its lower triangular part is Lk
         // note: v1 = \tilde{D}_k is a diagonal matrix
@@ -454,11 +454,11 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         // invert the unit lower triangular Lk
         // M2 <- Tk = inv(Lk)
         glass::loadIdentityTriangular<T>(state_size, s_M2);
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         glass::trsm_triangular<T, true>(state_size, s_M4, s_M2);
 
         // save M2 = Tk to d_T
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         for (unsigned ind = threadIdx.x; ind < triangular_state; ind += blockDim.x) {
             unsigned offset = blockrow * triangular_state + ind;
             d_T[offset] = s_M2[ind];
@@ -470,7 +470,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         }
 
         // save v1 = inv(\tilde{D}_k) to main diagonal Pinv
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         store_block_db<T>(state_size, knot_points,
                           s_v1,
                           d_Pinvdb,
@@ -482,7 +482,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         glass::trmv<T, false>(state_size, static_cast<T>(1), s_M2, s_v3, s_v1);
 
         // save v1 = Tk * gamma_k to d_gamma
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         for (unsigned ind = threadIdx.x; ind < state_size; ind += blockDim.x) {
             unsigned offset = (blockrow) * state_size + ind;
             d_gamma[offset] = s_v1[ind];
@@ -490,7 +490,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
 
         // M3 <- M2 * M1 = Tk * phi_k
         glass::trmm_left<T, false>(state_size, state_size, static_cast<T>(1), s_M2, s_M1, s_M3);
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
 
         // save M3 = Tk * phi_k into left off-diagonal of S
         store_block_ob<T>(state_size, knot_points,
@@ -503,7 +503,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
 
         // load identity to M1
         loadIdentity<T>(state_size, s_M1);
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         // M2 <- M1 * M3' = phi_k' * Tk'
         glass::gemm<T, true>(
                 state_size,
@@ -516,7 +516,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
         );
 
         // save phi_k' * T_k' into right off-diagonal of S
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         store_block_ob<T>(state_size, knot_points,
                           s_M2,                       // src
                           d_Sob,                         // dst
@@ -576,7 +576,7 @@ void transform_lambda_kernel(uint32_t state_size, uint32_t knot_points,
         glass::copy<T>(state_size, d_lambda + blockrow * state_size, s_lambda_k);
 
         // calculate T_k' * lambda_k
-        __syncthreads();//----------------------------------------------------------------
+        __syncthreads();
         glass::trmv<T, true>(state_size, static_cast<T>(1), s_T_k, s_lambda_k, s_lambdaNew_k);
 
         // save s_lambdaNew_k to d_lambda
