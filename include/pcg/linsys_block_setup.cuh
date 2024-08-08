@@ -13,11 +13,15 @@
 template<typename T>
 __device__
 void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
-                                     T *d_Sdb, T *d_Sob, T *d_Pinvdb, T *d_Pinvob, T *d_T,
+                                     T *d_S, T *d_Pinv, T *d_T,
                                      T *s_temp, unsigned blockrow) {
 
     const uint32_t states_sq = state_size * state_size;
     const uint32_t triangular_state = (state_size + 1) * state_size / 2;
+
+    T *d_Sob = d_S + knot_points * state_size;
+    T *d_Pinvdb = d_Pinv;
+    T *d_Pinvob = d_Pinv + knot_points * state_size;
 
     // shared block memory usage: 3nx^2 + nx(nx+1)/2 + 2nx
 
@@ -163,8 +167,13 @@ template<typename T>
 __device__
 void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t control_size, uint32_t knot_points,
                                                  T *d_G, T *d_C, T *d_g, T *d_c,
-                                                 T *d_Sdb, T *d_Sob, T *d_Pinvdb, T *d_Pinvob, T *d_T, T *d_gamma,
+                                                 T *d_S, T *d_Pinv, T *d_T, T *d_gamma,
                                                  T rho, T *s_temp, unsigned blockrow, bool chol_or_ldl) {
+
+    T *d_Sdb = d_S;
+    T *d_Sob = d_S + knot_points * state_size;
+    T *d_Pinvdb = d_Pinv;
+    T *d_Pinvob = d_Pinv + knot_points * state_size;
 
     // note: kkt.cuh stores Ak, Bk with minus sign, so the Ak, Bk here are actually -Ak, -Bk
 
@@ -525,7 +534,7 @@ __global__
 void form_S_gamma_Pinv_block_kernel(
         uint32_t state_size, uint32_t control_size, uint32_t knot_points,
         T *d_G, T *d_C, T *d_g, T *d_c,
-        T *d_Sdb, T *d_Sob, T *d_Pinvdb, T *d_Pinvob, T *d_T, T *d_gamma,
+        T *d_S, T *d_Pinv, T *d_T, T *d_gamma,
         T rho, bool chol_or_ldl) {
 
     extern __shared__ T s_temp[];
@@ -534,7 +543,7 @@ void form_S_gamma_Pinv_block_kernel(
         form_S_gamma_and_jacobi_Pinv_block_blockrow<T>(
                 state_size, control_size, knot_points,
                 d_G, d_C, d_g, d_c,
-                d_Sdb, d_Sob, d_Pinvdb, d_Pinvob, d_T, d_gamma,
+                d_S, d_Pinv, d_T, d_gamma,
                 rho, s_temp, blockrow, chol_or_ldl);
     }
     cgrps::this_grid().sync();
@@ -542,7 +551,7 @@ void form_S_gamma_Pinv_block_kernel(
     for (unsigned blockrow = blockIdx.x; blockrow < knot_points; blockrow += gridDim.x) {
         complete_SS_Pinv_block_blockrow<T>(
                 state_size, knot_points,
-                d_Sdb, d_Sob, d_Pinvdb, d_Pinvob, d_T,
+                d_S, d_Pinv, d_T,
                 s_temp, blockrow);
     }
 }
@@ -597,7 +606,7 @@ template<typename T>
 void form_schur_system_block(
         uint32_t state_size, uint32_t control_size, uint32_t knot_points,
         T *d_G_dense, T *d_C_dense, T *d_g, T *d_c,
-        T *d_Sdb, T *d_Sob, T *d_Pinvdb, T *d_Pinvob, T *d_T, T *d_gamma,
+        T *d_S, T *d_Pinv, T *d_T, T *d_gamma,
         T rho, bool chol_or_ldl) {
     // old shared block memory size                     7nx^2 + nx(nx+1)/2 + 8nx + nxnu + 3nu + 2nu^2 +3
     // form_S_gamma_and_jacobi_Pinv_block_blockrow      4nx^2 + 3nx + 1
@@ -611,7 +620,7 @@ void form_schur_system_block(
     void *args[] = {
             (void *) &state_size, (void *) &control_size, (void *) &knot_points,
             (void *) &d_G_dense, (void *) &d_C_dense, (void *) &d_g, (void *) &d_c,
-            (void *) &d_Sdb, (void *) &d_Sob, (void *) &d_Pinvdb, (void *) &d_Pinvob, (void *) &d_T, (void *) &d_gamma,
+            (void *) &d_S, (void *) &d_Pinv, (void *) &d_T, (void *) &d_gamma,
             (void *) &rho, (void *) &chol_or_ldl
     };
 
