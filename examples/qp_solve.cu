@@ -4,7 +4,6 @@
 #include "gpuassert.cuh"
 #include "read_array.h"
 #include <ctime>
-#include "pcg/qp_block.cuh"
 #include "pcg/qp.cuh"
 #include <tuple>
 
@@ -45,24 +44,24 @@ int main() {
     config.pcg_org_trans = false;
     config.pcg_poly_order = 0;
     std::tuple<uint32_t, double, double> qp_trans_stats, qp_org_stats;
-    qp_org_stats = qpBlockSolvePcg<double>(state_size, control_size, knot_points,
-                                           h_G_dense,
-                                           h_C_dense,
-                                           h_g,
-                                           h_c,
-                                           h_dz_org,
-                                           CHOL_OR_LDL,
-                                           config);
+    qp_org_stats = qpSolvePcg<double>(state_size, control_size, knot_points,
+                                      h_G_dense,
+                                      h_C_dense,
+                                      h_g,
+                                      h_c,
+                                      h_dz_org,
+                                      CHOL_OR_LDL,
+                                      config);
 
     config.pcg_org_trans = true;
-    qp_trans_stats = qpBlockSolvePcg<double>(state_size, control_size, knot_points,
-                                             h_G_dense,
-                                             h_C_dense,
-                                             h_g,
-                                             h_c,
-                                             h_dz_trans,
-                                             CHOL_OR_LDL,
-                                             config);
+    qp_trans_stats = qpSolvePcg<double>(state_size, control_size, knot_points,
+                                        h_G_dense,
+                                        h_C_dense,
+                                        h_g,
+                                        h_c,
+                                        h_dz_trans,
+                                        CHOL_OR_LDL,
+                                        config);
     uint32_t pcg_org_iters = std::get<0>(qp_org_stats);
     uint32_t pcg_trans_iters = std::get<0>(qp_trans_stats);
 
@@ -86,7 +85,7 @@ int main() {
 //    double linsys_time_total = 0;
 //    double qp_solve_time_total = 0;
 //    for (int i = 0; i < iteration; i++) {
-//        qp_trans_stats = qpBlockSolvePcg<double, CHOL_OR_LDL>(state_size, control_size, knot_points,
+//        qp_trans_stats = qpSolvePcg<double, CHOL_OR_LDL>(state_size, control_size, knot_points,
 //                                                             h_G_dense,
 //                                                             h_C_dense,
 //                                                             h_g,
