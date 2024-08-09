@@ -3,3 +3,4 @@
 *.exe
 *.o
 *.so
+build/
