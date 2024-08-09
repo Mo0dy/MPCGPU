@@ -4,7 +4,7 @@
 #include <iostream>
 #include <tuple>
 #include <filesystem>
-#include "sqp/sqp_pcg_DEV.cuh"
+#include "sqp/sqp_pcg_n.cuh"
 #include "dynamics/rbd_plant.cuh"
 #include "settings.cuh"
 #include "utils/experiment.cuh"

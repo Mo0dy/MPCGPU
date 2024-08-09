@@ -15,7 +15,7 @@
 #include <tuple>
 #include <time.h>
 #include "settings.cuh"
-#include "sqp/sqp_pcg_DEV.cuh"
+#include "sqp/sqp_pcg_n.cuh"
 #include "utils/integrator.cuh"
 #include "utils/experiment.cuh"
 #include "utils/io.cuh"
