@@ -1,3 +1,4 @@
+#pragma once
 #include "utils/matrix.cuh"
 
 template <typename T>

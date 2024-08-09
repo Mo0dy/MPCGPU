@@ -11,15 +11,34 @@
 #include <cuda_runtime.h>
 #include <tuple>
 #include <time.h>
-#include "linsys_setup.cuh"
-#include "common/kkt.cuh"
-#include "common/dz.cuh"
-#include "merit.cuh"
-#include "gpu_pcg.cuh"
-#include "settings.cuh"
 
+#include "settings.cuh"
+#include "kernels/single/setup_kkt.cuh" // kkt
+#include "kernels/single/setup_schur_pcg.cuh" // schur
+#include "gpu_pcg.cuh" // pcg
+#include "kernels/single/compute_dz.cuh" // dz
+#include "kernels/single/merit.cuh" // line search
+// Direct trajectory optimization through sequential quadratic programming using preconditioned conjugate gradient
+// 1. compute gradients and form KKT matrices
+// 2. form Schur complement system
+// 3. solve the system using PCG
+// 4. line search to ensure descent
+// 5. apply update step to trajectory (d_xu)
 template <typename T>
-auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const uint32_t knot_points, float timestep, T *d_eePos_traj, T *d_lambda, T *d_xu, void *d_dynMem_const, pcg_config<T>& config, T &rho, T rho_reset){
+auto sqpSolvePcg(const uint32_t state_size, 
+                 const uint32_t control_size, 
+                 const uint32_t knot_points, 
+                 float timestep, 
+                 T *d_eePos_goal_traj, //eePos goal trajectory
+                 T *d_lambda, 
+                 T *d_xu, //input state/control trajectory
+                 void *d_dynMem_const, 
+                 pcg_config<T>& config, 
+                 T &rho, 
+                 T rho_reset){
+
+
+                    
     
     // data storage
     std::vector<int> pcg_iter_vec;
@@ -83,7 +102,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
           *d_xs;
 
     
-    T drho = 1.0;
+    T drho = 1.0; //penalty param update
     T rho_factor = RHO_FACTOR;
     T rho_max = RHO_MAX;
     T rho_min = RHO_MIN;
@@ -107,7 +126,6 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     gpuErrchk(cudaMemcpy(d_xs, d_xu,  state_size*sizeof(T), cudaMemcpyDeviceToDevice));
     gpuErrchk(cudaMalloc(&d_merit_news, 8*sizeof(T)));
     gpuErrchk(cudaMalloc(&d_merit_temp, 8*knot_points*sizeof(T)));
-    // pcg iterates
 
     gpuErrchk(cudaMalloc(&d_merit_initial, sizeof(T)));
     gpuErrchk(cudaMemset(d_merit_initial, 0, sizeof(T)));
@@ -173,7 +191,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     compute_merit<T><<<knot_points, MERIT_THREADS, merit_smem_size>>>(
         state_size, control_size, knot_points,
         d_xu, 
-        d_eePos_traj, 
+        d_eePos_goal_traj, 
         static_cast<T>(10), 
         timestep, 
         d_dynMem_const, 
@@ -186,8 +204,12 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     //      SQP LOOP
     //
     for(uint32_t sqpiter = 0; sqpiter < SQP_MAX_ITER; sqpiter++){
-        
-        generate_kkt_submatrices<T><<<knot_points, KKT_THREADS, 2 * get_kkt_smem_size<T>(state_size, control_size)>>>(
+
+        dim3 block(KKT_THREADS);
+        dim3 grid(knot_points, 1); 
+        size_t smem_size = 2 * get_kkt_smem_size<T>(state_size, control_size);
+        generate_kkt_submatrices<T><<<grid, block, smem_size>>>(
+    
             state_size,
             control_size,
             knot_points,
@@ -197,7 +219,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
             d_c,
             d_dynMem_const,
             timestep,
-            d_eePos_traj,
+            d_eePos_goal_traj,
             d_xs,
             d_xu
         );
@@ -269,7 +291,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
                 (void *)&knot_points,
                 (void *)&d_xs,
                 (void *)&d_xu,
-                (void *)&d_eePos_traj,
+                (void *)&d_eePos_goal_traj,
                 (void *)&mu, 
                 (void *)&timestep,
                 (void *)&d_dynMem_const,

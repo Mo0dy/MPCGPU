@@ -12,11 +12,12 @@
 #include <tuple>
 #include <time.h>
 #include "qdldl.h"
-#include "qdldl/linsys_setup.cuh"
-#include "merit.cuh"
 #include "settings.cuh"
-#include "kkt.cuh"
-#include "dz.cuh"
+#include "kernels/setup_kkt.cuh" // kkt
+#include "kernels/setup_schur_qdldl.cuh" // schur
+#include "gpu_pcg.cuh" // pcg
+#include "kernels/compute_dz.cuh" // dz
+#include "kernels/merit.cuh" // line search
 
 
 __host__

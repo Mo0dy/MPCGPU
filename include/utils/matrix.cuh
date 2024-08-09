@@ -1,11 +1,18 @@
 #pragma once
 #include <cstdint>
-// TODO: GBD-PCG utils include fix
-#include "utils.cuh"
-
+#include "utils.cuh" // TODO: GBD-PCG utils include fix
     
 
-
+/**
+ * @brief Performs matrix-vector multiplication A^T * x
+ *
+ * @tparam T The data type of the matrix and vector elements
+ * @param out The output vector
+ * @param mat The input matrix (stored in column-major order)
+ * @param vec The input vector
+ * @param m The number of rows in the matrix
+ * @param n The number of columns in the matrix
+ */
 template <typename T>
 __device__
 void gato_ATx(T *out, T *mat, T *vec, int m, int n){
@@ -24,6 +31,15 @@ void gato_ATx(T *out, T *mat, T *vec, int m, int n){
     }
 }
 
+/**
+ * @brief Computes the element-wise difference between two vectors
+ *
+ * @tparam T The data type of the vector elements
+ * @param out The output vector
+ * @param vec1 The first input vector
+ * @param vec2 The second input vector
+ * @param size The size of the vectors
+ */
 template <typename T>
 __device__
 void gato_vec_dif(T *out, T *vec1, T *vec2, int size){
@@ -32,6 +48,15 @@ void gato_vec_dif(T *out, T *vec1, T *vec2, int size){
     }
 }
 
+/**
+ * @brief Computes the element-wise sum of two vectors
+ *
+ * @tparam T The data type of the vector elements
+ * @param out The output vector
+ * @param vec1 The first input vector
+ * @param vec2 The second input vector
+ * @param size The size of the vectors
+ */
 template <typename T>
 __device__
 void gato_vec_sum(T *out, T *vec1, T *vec2, int size){
@@ -40,7 +65,16 @@ void gato_vec_sum(T *out, T *vec1, T *vec2, int size){
     }
 }
 
-
+/**
+ * @brief Performs matrix-vector multiplication
+ *
+ * @tparam T The data type of the matrix and vector elements
+ * @param MAT_ROWS The number of rows in the matrix
+ * @param MAT_COLS The number of columns in the matrix
+ * @param mat The input matrix (stored in column-major order)
+ * @param vec The input vector
+ * @param out The output vector
+ */
 template <typename T>
 __device__
 void mat_vec_prod(unsigned MAT_ROWS, unsigned MAT_COLS, T *mat, T *vec, T *out){
@@ -54,6 +88,14 @@ void mat_vec_prod(unsigned MAT_ROWS, unsigned MAT_COLS, T *mat, T *vec, T *out){
     }
 }
 
+/**
+ * @brief Adds a scaled identity matrix to an existing matrix
+ *
+ * @tparam T The data type of the matrix elements
+ * @param A The input/output matrix
+ * @param dim The dimension of the square matrix
+ * @param factor The scaling factor for the identity matrix
+ */
 template <typename T>
 __device__
 void add_identity(T *A, unsigned dim, T factor){
@@ -117,6 +159,14 @@ void loadIdentity(unsigned DIMA, unsigned DIMB, unsigned DIMC, T *A, T *B, T *C)
     }
 }
 
+/**
+ * @brief Inverts a square matrix using Gaussian elimination
+ *
+ * @tparam T The data type of the matrix elements
+ * @param DIM The dimension of the square matrix
+ * @param A The input/output matrix
+ * @param s_temp Temporary shared memory for calculations
+ */
 template <typename T>
 __device__
 void invertMatrix(uint32_t DIM, T *A, T *s_temp){ 
@@ -235,35 +285,4 @@ void invertMatrix(unsigned DIMA, unsigned DIMB, unsigned DIMC, unsigned MAX_DIM,
         }
         __syncthreads(); //----------------------
     }
-}
-
-
-void write_device_matrix_to_file(float* d_matrix, int rows, int cols, const char* filename, int filesuffix = 0) {
-    
-    char fname[100];
-    snprintf(fname, sizeof(fname), "%s%d.txt", filename, filesuffix);
-    
-    // Allocate host memory for the matrix
-    float* h_matrix = new float[rows * cols];
-
-    // Copy the data from the device to the host memory
-    size_t pitch = cols * sizeof(float);
-    cudaMemcpy2D(h_matrix, pitch, d_matrix, pitch, pitch, rows, cudaMemcpyDeviceToHost);
-
-    // Write the data to a file in column-major order
-    std::ofstream outfile(fname);
-    if (outfile.is_open()) {
-        for (int row = 0; row < rows; ++row) {
-            for (int col = 0; col < cols; ++col) {
-                outfile << std::setprecision(std::numeric_limits<float>::max_digits10+1) << h_matrix[col * rows + row] << "\t";
-            }
-            outfile << std::endl;
-        }
-        outfile.close();
-    } else {
-        std::cerr << "Unable to open file: " << fname << std::endl;
-    }
-
-    // Deallocate host memory
-    delete[] h_matrix;
 }

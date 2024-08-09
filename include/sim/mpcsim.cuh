@@ -13,20 +13,20 @@
 #include <cuda_runtime.h>
 #include <tuple>
 #include <time.h>
-#include "integrator.cuh"
 #include "settings.cuh"
+#include "utils/integrator.cuh"
 #include "utils/experiment.cuh"
-#include "gpuassert.cuh"
+#include "utils/io.cuh"
+#include "utils/simulator.cuh"
 
-#if LINSYS_SOLVE == 1
-#include "pcg/sqp.cuh"
+
+#if LINSYS_SOLVE
+#include "sqp/sqp_pcg.cuh"
 #else 
-#include "qdldl/sqp.cuh"
+#include "sqp/sqp_qdldl.cuh"
 #endif
 
-
-
-template <typename T>
+template <typename T> //TODO: where is this being used??
 __global__
 void compute_tracking_error_kernel(T *d_tracking_error, uint32_t state_size, T *d_xu_goal, T *d_xs){
     
@@ -37,7 +37,6 @@ void compute_tracking_error_kernel(T *d_tracking_error, uint32_t state_size, T *
         atomicAdd(d_tracking_error, err);
     }
 }
-
 
 template <typename T>
 T compute_tracking_error(uint32_t state_size, T *d_xu_goal, T *d_xs){
@@ -56,97 +55,8 @@ T compute_tracking_error(uint32_t state_size, T *d_xu_goal, T *d_xs){
 
 
 template <typename T>
-void dump_tracking_data(std::vector<int> *pcg_iters, std::vector<bool> *pcg_exits, std::vector<double> *linsys_times, std::vector<double> *sqp_times, std::vector<uint32_t> *sqp_iters, 
-                std::vector<bool> *sqp_exits, std::vector<T> *tracking_errors, std::vector<std::vector<T>> *tracking_path, uint32_t timesteps_taken, 
-                uint32_t control_updates_taken, uint32_t start_state_ind, uint32_t goal_state_ind, uint32_t test_iter,
-                std::string filename_prefix){
-    // Helper function to create file names
-    auto createFileName = [&](const std::string& data_type) {
-        std::string filename = filename_prefix + "_" + std::to_string(test_iter) + "_" + data_type + ".result";
-        return filename;
-    };
-    
-    // Helper function to dump single-dimension vector data
-    auto dumpVectorData = [&](const auto& data, const std::string& data_type) {
-        std::ofstream file(createFileName(data_type));
-        if (!file.is_open()) {
-            std::cerr << "Failed to open " << data_type << " file.\n";
-            return;
-        }
-        for (const auto& item : *data) {
-            file << item << '\n';
-        }
-        file.close();
-    };
-
-    // Dump single-dimension vector data
-    dumpVectorData(pcg_iters, "pcg_iters");
-    dumpVectorData(linsys_times, "linsys_times");
-    dumpVectorData(sqp_times, "sqp_times");
-    dumpVectorData(sqp_iters, "sqp_iters");
-    dumpVectorData(sqp_exits, "sqp_exits");
-    dumpVectorData(tracking_errors, "tracking_errors");
-    dumpVectorData(pcg_exits, "pcg_exits");
-
-
-    // Dump two-dimension vector data (tracking_path)
-    std::ofstream file(createFileName("tracking_path"));
-    if (!file.is_open()) {
-        std::cerr << "Failed to open tracking_path file.\n";
-        return;
-    }
-    for (const auto& outerItem : *tracking_path) {
-        for (const auto& innerItem : outerItem) {
-            file << innerItem << ',';
-        }
-        file << '\n';
-    }
-    file.close();
-
-    std::ofstream statsfile(createFileName("stats"));
-    if (!statsfile.is_open()) {
-        std::cerr << "Failed to open stats file.\n";
-        return;
-    }
-    statsfile << "timesteps: " << timesteps_taken << "\n";
-    statsfile << "control_updates: " << control_updates_taken << "\n";
-    // printStatsToFile<double>(&linsys_times, )
-    
-    statsfile.close();
-}
-
-
-void print_test_config(){
-    std::cout << "Knot points: " << KNOT_POINTS << "\n";
-    std::cout << "State size: " << STATE_SIZE << "\n";
-    std::cout << "Datatype: " << (USE_DOUBLES ? "DOUBLE" : "FLOAT") << "\n";
-    std::cout << "Sqp exits condition: " << (CONST_UPDATE_FREQ ? "CONSTANT TIME" : "CONSTANT ITERS") << "\n";
-    std::cout << "QD COST: " << QD_COST << "\n";
-    std::cout << "R COST: " << R_COST << "\n";
-    std::cout << "Rho factor: " << RHO_FACTOR << "\n";
-    std::cout << "Rho max: " << RHO_MAX << "\n";
-    std::cout << "Test iters: " << TEST_ITERS << "\n";
-#if CONST_UPDATE_FREQ
-    std::cout << "Max sqp time: " << SQP_MAX_TIME_US << "\n";
-#else
-    std::cout << "Max sqp iter: " << SQP_MAX_ITER << "\n";
-#endif
-    std::cout << "Solver: " << ( (LINSYS_SOLVE == 1) ? "PCG" : "QDLDL") << "\n";
-#if LINSYS_SOLVE == 1
-    std::cout << "Max pcg iter: " << PCG_MAX_ITER << "\n";
-    // std::cout << "pcg exit tol: " << PCG_EXIT_TOL << "\n";
-#endif
-    std::cout << "Save data: " << (SAVE_DATA ? "ON" : "OFF") << "\n";
-    std::cout << "Jitters: " << (REMOVE_JITTERS ? "ON" : "OFF") << "\n";
-
-    std::cout << "\n\n";
-}
-
-
-template <typename T, typename return_type>
 std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> simulateMPC(const uint32_t state_size, const uint32_t control_size, const uint32_t knot_points, const uint32_t traj_steps, 
-            float timestep, T *d_eePos_traj, T *d_xu_traj, T *d_xs, uint32_t start_state_ind, uint32_t goal_state_ind, uint32_t test_iter, T linsys_exit_tol,
-            std::string test_output_prefix){
+            float timestep, T *d_eePos_traj, T *d_xu_traj, T *d_xs, T linsys_exit_tol, MPCLogParams mpc_log_params){
 
     const uint32_t traj_len = (state_size+control_size)*knot_points-control_size;
 
@@ -182,7 +92,7 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
 
 
     // mpc iterates
-    T *d_lambda, *d_eePos_goal, *d_xu, *d_xu_old;
+    T *d_lambda, *d_eePos_goal, *d_xu, *d_xu_old; // d_xu is the current state+control vector, d_xu_old is the previous one
     gpuErrchk(cudaMalloc(&d_lambda, state_size*knot_points*sizeof(T)));
     gpuErrchk(cudaMalloc(&d_xu, traj_len*sizeof(T)));
     gpuErrchk(cudaMalloc(&d_xu_old, traj_len*sizeof(T)));
@@ -395,9 +305,22 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
 
 
     }
-#if SAVE_DATA
+
+
+
+
+
+
+
+
+
+
+
+
+    
+#if SAVE_DATA 
     dump_tracking_data(&linsys_iters, &linsys_exits, &linsys_times, &sqp_times, &sqp_iters, &sqp_exits, &tracking_errors, &tracking_path, 
-            traj_offset, control_update_step, start_state_ind, goal_state_ind, test_iter, test_output_prefix);
+            traj_offset, control_update_step, mpc_log_params);
 #endif
     
 

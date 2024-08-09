@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cooperative_groups.h>
 #include "dynamics/rbd_plant.cuh"
-#include "integrator.cuh"
+#include "utils/integrator.cuh"
 
 //TODO: this
 template <typename T>

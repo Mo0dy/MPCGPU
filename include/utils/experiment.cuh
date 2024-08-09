@@ -13,6 +13,44 @@
 
 #define time_delta_us_timespec(start,end) (1e6*static_cast<double>(end.tv_sec - start.tv_sec)+1e-3*static_cast<double>(end.tv_nsec - start.tv_nsec))
 
+std::string getCurrentTimestamp() {
+   time_t rawtime;
+   struct tm * timeinfo;
+   char buffer[80];
+   time(&rawtime);
+   timeinfo = localtime(&rawtime);
+   strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", timeinfo);
+   std::string timestampStr(buffer);
+   return timestampStr;
+}
+
+void print_test_config(){
+   std::cout << "Knot points: " << KNOT_POINTS << "\n";
+   std::cout << "State size: " << STATE_SIZE << "\n";
+   std::cout << "Datatype: " << (USE_DOUBLES ? "DOUBLE" : "FLOAT") << "\n";
+   std::cout << "Sqp exits condition: " << (CONST_UPDATE_FREQ ? "CONSTANT TIME" : "CONSTANT ITERS") << "\n";
+   std::cout << "QD COST: " << QD_COST << "\n";
+   std::cout << "R COST: " << R_COST << "\n";
+   std::cout << "Rho factor: " << RHO_FACTOR << "\n";
+   std::cout << "Rho max: " << RHO_MAX << "\n";
+   std::cout << "Test iters: " << TEST_ITERS << "\n";
+#if CONST_UPDATE_FREQ
+   std::cout << "Max sqp time: " << SQP_MAX_TIME_US << "\n";
+#else
+   std::cout << "Max sqp iter: " << SQP_MAX_ITER << "\n";
+#endif
+   std::cout << "Solver: " << ( (LINSYS_SOLVE == 1) ? "PCG" : "QDLDL") << "\n";
+#if LINSYS_SOLVE == 1
+   std::cout << "Max pcg iter: " << PCG_MAX_ITER << "\n";
+   // std::cout << "pcg exit tol: " << PCG_EXIT_TOL << "\n";
+#endif
+   std::cout << "Save data: " << (SAVE_DATA ? "ON" : "OFF") << "\n";
+   std::cout << "Jitters: " << (REMOVE_JITTERS ? "ON" : "OFF") << "\n";
+
+   std::cout << "\n\n";
+}
+
+
 template<bool PRINT_DISTRIBUTION = true>
 void printStats(std::vector<double> *times){
    double sum = std::accumulate(times->begin(), times->end(), 0.0);
@@ -74,35 +112,6 @@ void printStats(std::vector<double> *times){
    }
 }
 
-std::string getCurrentTimestamp() {
-   time_t rawtime;
-   struct tm * timeinfo;
-   char buffer[80];
-   time(&rawtime);
-   timeinfo = localtime(&rawtime);
-   strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", timeinfo);
-   std::string timestampStr(buffer);
-   return timestampStr;
-}
-
-// Function to format stats string values into CSV format
-std::string getStatsString(const std::string& statsString) {
-   std::stringstream ss(statsString);
-   std::string token;
-   std::string csvFormattedString;
-   
-   while (getline(ss, token, '[')) {
-       if (getline(ss, token, ']')) {
-           if (!csvFormattedString.empty()) {
-               csvFormattedString += ",";
-           }
-           csvFormattedString += token;
-       }
-   }
-   
-   return csvFormattedString;
-}
-
 template<typename T>
 std::string printStats(std::vector<T> *data, std::string prefix = "data"){
    T sum = std::accumulate(data->begin(), data->end(), static_cast<T>(0));
@@ -132,39 +141,11 @@ std::string printStats(std::vector<T> *data, std::string prefix = "data"){
       Q1 = sortedData[n/4];
       Q3 = sortedData[3*n/4];
    }
-   std::cout << "Average[" << mean << "] Std Dev [" << stdev << "] Min [" << min << "] Max [" << max << "] Median [" << median << "] Q1 [" << Q1 << "] Q3 [" << Q3 << "]" << std::endl;
+   std::cout << "Average [" << mean << "] Std Dev [" << stdev << "] Min [" << min << "] Max [" << max << "] Median [" << median << "] Q1 [" << Q1 << "] Q3 [" << Q3 << "]" << std::endl;
 
    // Construct the formatted string
    std::stringstream ss;
-   ss << "Average[" << mean << "] Std Dev [" << stdev << "] Min [" << min << "] Max [" << max << "] Median [" << median << "] Q1 [" << Q1 << "] Q3 [" << Q3 << "]";
+   ss << "Average [" << mean << "] Std Dev [" << stdev << "] Min [" << min << "] Max [" << max << "] Median [" << median << "] Q1 [" << Q1 << "] Q3 [" << Q3 << "]";
    
    return ss.str();
-}
-
-template <typename T>
-std::vector<std::vector<T>> readCSVToVecVec(const std::string& filename) {
-    std::vector<std::vector<T>> data;
-    std::ifstream infile(filename);
-
-    if (!infile.is_open()) {
-        std::cerr << "File [ " << filename << " ] could not be opened!\n";
-    } else {
-        std::string line;
-
-
-        while (std::getline(infile, line)) {
-            std::vector<T> row;
-            std::stringstream ss(line);
-            std::string val;
-
-            while (std::getline(ss, val, ',')) {
-                row.push_back(std::stof(val));
-            }
-
-            data.push_back(row);
-        }
-    }
-
-    infile.close();
-    return data;
 }
