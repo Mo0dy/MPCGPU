@@ -65,7 +65,7 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
 
     T *d_S, *d_Pinv;
     T *d_T = NULL;
-    T *d_I_H = NULL;
+    T *d_H = NULL;
     if (config.pcg_org_trans) {
         // TRANS
         gpuErrchk(cudaMalloc(&d_S, 2 * Nnx2_T + Nnx_T));
@@ -75,6 +75,11 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
         // ORG
         gpuErrchk(cudaMalloc(&d_S, 3 * Nnx2_T));
         gpuErrchk(cudaMalloc(&d_Pinv, 3 * Nnx2_T));
+    }
+
+    bool use_H = config.pcg_poly_order > 0;
+    if (use_H) {
+        gpuErrchk(cudaMalloc(&d_H, 3 * Nnx2_T));
     }
 
     T *d_gamma, *d_lambda;
@@ -99,10 +104,10 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
     // the given KKT matrix (G_dense, C_dense, g, c)
     form_schur_system_block<T>(state_size, control_size, knot_points,
                                d_G_dense, d_C_dense, d_g, d_c,
-                               d_S, d_Pinv, d_T,
+                               d_S, d_Pinv, d_H, d_T,
                                d_gamma,
                                rho,
-                               config.pcg_org_trans, chol_or_ldl);
+                               config.pcg_org_trans, chol_or_ldl, use_H);
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());
 
@@ -114,7 +119,7 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
             knot_points,
             d_S,
             d_Pinv,
-            d_I_H,
+            d_H,
             d_gamma,
             d_lambda,
             d_r,

@@ -99,7 +99,9 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
     u = zeros(nu, N-1);
 
     [D, O, S] = formKKTSchur(A, B, Q, R, N);
-    P = formPreconditionerSS(D, O, N, nx);
+    [~, ~, P] = formPreconditionerSS(D, O, N, nx);
+%     [~, ~, ~, H] = formPolyPreconditionerH(D, O, N, nx);
+%     disp(H)
 %     disp('S original')
 %     disp(S)
     % plotSpectrum(P, S)
@@ -111,8 +113,8 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
 %     for i=1:N
 %        disp(T_ldl{i})
 %     end
-    P_t_ldl = formPreconditionerSS(D_t_ldl, O_t_ldl, N, nx);
-    P_t_chol = formPreconditionerSS(D_t_chol, O_t_chol, N, nx);
+    [~, ~, P_t_ldl] = formPreconditionerSS(D_t_ldl, O_t_ldl, N, nx);
+    [~, ~, P_t_chol] = formPreconditionerSS(D_t_chol, O_t_chol, N, nx);
 %     disp('P_t_ldl')
 %     disp(P_t_ldl)
     % plotSpectrum(P_t, S_t)
@@ -209,22 +211,49 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
     
 end
 
+function [D_H, O_up2, O_down2, H] = formPolyPreconditionerH(D, O, N, nx)
+    % this is for split = 3
+    % split = 3 -> left & right stair splitting + diagonal splitting
+    [~, O_add, ~] = formPreconditionerSS(D, O, N, nx);
+    
+    O_up1 = cell(1, N-1);
+    O_down1 = cell(1, N-1);
+    for i=1:N-1
+        O_up1{i} = zeros(nx);
+        O_down1{i} = zeros(nx);
+    end
+    O_up2 = cell(1, N-2);
+    O_down2 = cell(1, N-2);
+    D_H = cell(1, N);
+    D_H{1} = -O_add{1} * O{1}';
+    D_H{N} = -O_add{N-1}'* O{N-1};
+    for i=2:N-1
+        D_H{i} = -O_add{i} * O{i}' - O_add{i-1}'* O{i-1};
+        O_up2{i-1} = -O_add{i-1} * O{i};
+        O_down2{i-1} = -O_add{i}'* O{i-1}';
+    end
+    H = composeBlockPentDiagMatrix(D_H, O_up1, O_up2, O_down1, O_down2, N, nx);
+end
+
+function out = composeBlockPentDiagMatrix(D, O_up1, O_up2, O_down1, O_down2, N, nx)
+    % need N >= 4
+    % D length = N
+    % O_up1, O_down1 = N - 1
+    % O_up2, O_down2 = N - 2
+    out = zeros(N*nx);
+    out(1:nx, 1:3*nx) = [D{1}, O_up1{1}, O_up2{1}];
+    out(1+nx:2*nx, 1:4*nx) = [O_down1{1}, D{2}, O_up1{2}, O_up2{2}];
+    for i=3:N-2
+        out((i-1)*nx+1:i*nx, (i-3)*nx+1:(i+2)*nx) = [O_down2{i-2}, O_down1{i-1}, D{i}, O_up1{i}, O_up2{i}];
+    end
+    out((N-2)*nx+1:(N-1)*nx, (N-4)*nx+1:end) = [O_down2{N-3}, O_down1{N-2}, D{N-1}, O_up1{N-1}];
+    out((N-1)*nx+1:end, (N-3)*nx+1:end) = [O_down2{N-2}, O_down1{N-1}, D{N}];
+end
+
 function l = sortUniqueEigen(A)
     eigens = sort(eig(A));
     eigens = real(eigens);
     l = length(uniquetol(eigens, 1e-6));
-end
-
-function plotSpectrum(P, S)
-    nS = size(S, 1);
-    result = P * S;
-    eigens = sort(eig(result));
-    eigens = real(eigens);
-    figure
-    subplot(2,1,1)
-    scatter(eigens, zeros(nS, 1), 'r', 'filled')
-    subplot(2,1,2)
-    plot(eigens, 'r')
 end
 
 function [D, O, S] = formKKTSchur(A, B, Q, R, N)
@@ -242,7 +271,7 @@ function [D, O, S] = formKKTSchur(A, B, Q, R, N)
     S = composeBlockDiagonalMatrix(D, O, N, nx);
 end
 
-function P = formPreconditionerSS(D, O, N, nx)
+function [D_p, O_p, P] = formPreconditionerSS(D, O, N, nx)
     D_p = cell(1, N);
     O_p = cell(1, N-1); 
 

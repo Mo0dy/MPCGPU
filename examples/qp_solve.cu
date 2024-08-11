@@ -42,18 +42,30 @@ int main() {
 
     struct pcg_config<double> config;
     config.pcg_org_trans = false;
+    std::tuple<uint32_t, double, double> qp_trans_stats, qp_org_stats_m0, qp_org_stats_m1;
     config.pcg_poly_order = 0;
-    std::tuple<uint32_t, double, double> qp_trans_stats, qp_org_stats;
-    qp_org_stats = qpSolvePcg<double>(state_size, control_size, knot_points,
-                                      h_G_dense,
-                                      h_C_dense,
-                                      h_g,
-                                      h_c,
-                                      h_dz_org,
-                                      CHOL_OR_LDL,
-                                      config);
+    qp_org_stats_m0 = qpSolvePcg<double>(state_size, control_size, knot_points,
+                                         h_G_dense,
+                                         h_C_dense,
+                                         h_g,
+                                         h_c,
+                                         h_dz_org,
+                                         CHOL_OR_LDL,
+                                         config);
+
+    config.pcg_poly_order = 1;
+    config.pcg_poly_coeff[0] = 1.0;
+    qp_org_stats_m1 = qpSolvePcg<double>(state_size, control_size, knot_points,
+                                         h_G_dense,
+                                         h_C_dense,
+                                         h_g,
+                                         h_c,
+                                         h_dz_org,
+                                         CHOL_OR_LDL,
+                                         config);
 
     config.pcg_org_trans = true;
+    config.pcg_poly_order = 0;
     qp_trans_stats = qpSolvePcg<double>(state_size, control_size, knot_points,
                                         h_G_dense,
                                         h_C_dense,
@@ -62,10 +74,12 @@ int main() {
                                         h_dz_trans,
                                         CHOL_OR_LDL,
                                         config);
-    uint32_t pcg_org_iters = std::get<0>(qp_org_stats);
+    uint32_t pcg_org_iters_m0 = std::get<0>(qp_org_stats_m0);
+    uint32_t pcg_org_iters_m1 = std::get<0>(qp_org_stats_m1);
     uint32_t pcg_trans_iters = std::get<0>(qp_trans_stats);
 
-    std::cout << "Original PCG iteration number: " << pcg_org_iters << std::endl;
+    std::cout << "Original PCG iteration number m = 0: " << pcg_org_iters_m0 << std::endl;
+    std::cout << "Original PCG iteration number m = 1: " << pcg_org_iters_m1 << std::endl;
     std::cout << "Transformed PCG iteration number: " << pcg_trans_iters << std::endl;
 
     double norm_org = 0;

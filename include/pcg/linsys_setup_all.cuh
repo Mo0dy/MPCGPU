@@ -13,8 +13,8 @@
 template<typename T>
 __device__
 void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
-                                     T *d_S, T *d_Pinv, T *d_T,
-                                     T *s_temp, unsigned blockrow, bool org_trans) {
+                                     T *d_S, T *d_Pinv, T *d_H, T *d_T,
+                                     T *s_temp, unsigned blockrow, bool org_trans, bool use_H) {
 
     const uint32_t states_sq = state_size * state_size;
     const unsigned lastrow = knot_points - 1;
@@ -157,103 +157,196 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
         // ORG
         // shared block memory usage: 4nx^2
 
-        T *s_phi_k = s_temp;
-        T *s_phi_kp1_T = s_phi_k;                       // share nx^2
-        T *s_thetaInv_k = s_phi_kp1_T + states_sq;
-        T *s_thetaInv_km1 = s_thetaInv_k;
-        T *s_thetaInv_kp1 = s_thetaInv_km1;             // share nx^2
-        T *s_PhiInv_k_R = s_thetaInv_kp1 + states_sq;
-        T *s_PhiInv_k_L = s_PhiInv_k_R;                 // share nx^2
-        T *s_scratch = s_PhiInv_k_L + states_sq;
-        T *s_end = s_scratch + states_sq;
-
-        // load thetaInv_k
-        load_block_bd<T>(state_size, knot_points,
-                         d_Pinv,
-                         s_thetaInv_k,
-                         1,
-                         blockrow
-        );
+        T *s_M1 = s_temp;
+        T *s_M2 = s_M1 + states_sq;
+        T *s_M3 = s_M2 + states_sq;
+        T *s_M4 = s_M3 + states_sq;
+        T *s_end = s_M4 + states_sq;
 
         if (blockrow != lastrow) {
-            // load phi_kp1_T
+            // load thetaInv_k = Dk_inv to M1
+            load_block_bd<T>(state_size, knot_points,
+                             d_Pinv,
+                             s_M1,
+                             1,
+                             blockrow
+            );
+
+            // load phi_kp1_T = Ok to M2
             load_block_bd<T>(state_size, knot_points,
                              d_S,                // src
-                             s_phi_kp1_T,        // dst
+                             s_M2,               // dst
                              0,                  // block column (0, 1, or 2)
                              blockrow + 1,       // block row
                              true                // transpose
             );
             __syncthreads();
 
-            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_thetaInv_k, s_phi_kp1_T,
-                           s_scratch);
+            // M3 <- M1 * M2 = thetaInv_k * phi_kp1_T = Dk_inv * Ok
+            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M2, s_M3);
             __syncthreads();
 
-            // load thetaInv_kp1
+            // load thetaInv_kp1 = Dkp1_inv to M1
             load_block_bd<T>(state_size, knot_points,
                              d_Pinv,
-                             s_thetaInv_kp1,
+                             s_M1,
                              1,
                              blockrow + 1
             );
             __syncthreads();
 
-            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_scratch, s_thetaInv_kp1,
-                           s_PhiInv_k_R);
+            // M4 <- M3 * M1 = thetaInv_k * phi_kp1_T * thetaInv_kp1
+            // M4 = Ek = Dk_inv * Ok * Dkp1_inv
+            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M3, s_M1, s_M4);
             __syncthreads();
 
-            store_block_bd<T>(
-                    state_size, knot_points,
-                    s_PhiInv_k_R,
-                    d_Pinv,
-                    2,
-                    blockrow,
-                    -1
+            // save -M4 = -Ek to Pinv
+            store_block_bd<T>(state_size, knot_points,
+                              s_M4,
+                              d_Pinv,
+                              2,
+                              blockrow,
+                              -1            // negative
             );
+
+            if (use_H) {
+                // M1 <- M4 * M2' = Ek * Ok'
+                glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M1);
+                __syncthreads();
+
+                // save M1 = Ek * Ok' to H, will be read again in the general case
+                store_block_bd<T>(state_size, knot_points,
+                                  s_M1,
+                                  d_H,
+                                  1,            // middle
+                                  blockrow,
+                                  1
+                );
+
+                if (blockrow != lastrow - 1) {
+                    // load phi_kp2_T = Okp1 to M2
+                    load_block_bd<T>(state_size, knot_points,
+                                     d_S,                // src
+                                     s_M2,               // dst
+                                     0,                  // block column (0, 1, or 2)
+                                     blockrow + 2,       // block row
+                                     true                // transpose
+                    );
+                    __syncthreads();
+
+                    // M3 <- M4 * M2 = Ek * Okp1
+                    glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M3);
+                    __syncthreads();
+
+                    // save M3 = Ek * Okp1 to H
+                    store_block_bd<T>(state_size, knot_points,
+                                      s_M3,
+                                      d_H,
+                                      2,            // right
+                                      blockrow,
+                                      1
+                    );
+                }
+            }
         }
 
-        // load thetaInv_k again. If 5nx^2 is available, this reloading can be saved.
-        load_block_bd<T>(state_size, knot_points,
-                         d_Pinv,
-                         s_thetaInv_k,
-                         1,
-                         blockrow
-        );
-
         if (blockrow != 0) {
-            // load phi_k
+            // load thetaInv_k = Dk_inv to M1
+            load_block_bd<T>(state_size, knot_points,
+                             d_Pinv,
+                             s_M1,
+                             1,
+                             blockrow
+            );
+
+            // load phi_k = Okm1_T to M2
             load_block_bd<T>(state_size, knot_points,
                              d_S,
-                             s_phi_k,
+                             s_M2,
                              0,
                              blockrow
             );
             __syncthreads();
 
-            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_thetaInv_k, s_phi_k, s_scratch);
+            // M3 <- M1 * M2 = thetaInv_k * phi_k = Dk_inv * Okm1_T
+            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M2, s_M3);
             __syncthreads();
 
-            // load thetaInv_km1
+            // load thetaInv_km1 = Dkm1_inv to M1
             load_block_bd<T>(state_size, knot_points,
                              d_Pinv,
-                             s_thetaInv_km1,
+                             s_M1,
                              1,
                              blockrow - 1
             );
             __syncthreads();
 
-            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_scratch, s_thetaInv_km1,
-                           s_PhiInv_k_L);
+            // M4 <- M3 * M1 = thetaInv_k * phi_k * thetaInv_km1
+            // M4 = Ekm1_T = Dk_inv * Okm1_T * Dkm1_inv
+            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M3, s_M1, s_M4);
             __syncthreads();
 
+            // save -M4 = -Ekm1_T to Pinv
             store_block_bd<T>(state_size, knot_points,
-                              s_PhiInv_k_L,
+                              s_M4,
                               d_Pinv,
                               0,
                               blockrow,
-                              -1
+                              -1            // negative
             );
+
+            if (use_H) {
+                // M1 <- M4 * M2' = Ekm1_T * Okm1
+                glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M1);
+                __syncthreads();
+
+                if (blockrow != lastrow) {
+                    // load M2 = Ek * Ok' (has been calculated before) from H
+                    load_block_bd<T>(state_size, knot_points,
+                                     d_H,
+                                     s_M2,
+                                     1,            // middle
+                                     blockrow
+                    );
+                    // M1 <- M1 + M2 = Ekm1_T * Okm1 + Ek * Ok'
+                    for (unsigned ind = threadIdx.x; ind < states_sq; ind += blockDim.x) {
+                        s_M1[ind] += s_M2[ind];
+                    }
+                }
+
+                // save M1 = Ekm1_T * Okm1 (lastrow) or Ekm1_T * Okm1 + Ek * Ok' to H
+                store_block_bd<T>(state_size, knot_points,
+                                  s_M1,
+                                  d_H,
+                                  1,            // middle
+                                  blockrow,
+                                  1
+                );
+
+                if (blockrow != 1) {
+                    // load phi_km1 = Okm2_T to M2
+                    load_block_bd<T>(state_size, knot_points,
+                                     d_S,
+                                     s_M2,
+                                     0,
+                                     blockrow - 1
+                    );
+                    __syncthreads();
+
+                    // M3 <- M4 * M2 = Ekm1_T * Okm2_T
+                    glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M3);
+                    __syncthreads();
+
+                    // save M3 = Ekm1_T * Okm2_T to H
+                    store_block_bd<T>(state_size, knot_points,
+                                      s_M3,
+                                      d_H,
+                                      0,            // left
+                                      blockrow,
+                                      1
+                    );
+                }
+            }
         }
     }
 }
@@ -740,11 +833,10 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
 
 template<typename T>
 __global__
-void form_S_gamma_Pinv_block_kernel(
-        uint32_t state_size, uint32_t control_size, uint32_t knot_points,
-        T *d_G, T *d_C, T *d_g, T *d_c,
-        T *d_S, T *d_Pinv, T *d_T, T *d_gamma,
-        T rho, bool org_trans, bool chol_or_ldl) {
+void form_S_gamma_Pinv_block_kernel(uint32_t state_size, uint32_t control_size, uint32_t knot_points,
+                                    T *d_G, T *d_C, T *d_g, T *d_c,
+                                    T *d_S, T *d_Pinv, T *d_H, T *d_T, T *d_gamma,
+                                    T rho, bool org_trans, bool chol_or_ldl, bool use_H) {
 
     extern __shared__ T s_temp[];
 
@@ -760,8 +852,8 @@ void form_S_gamma_Pinv_block_kernel(
     for (unsigned blockrow = blockIdx.x; blockrow < knot_points; blockrow += gridDim.x) {
         complete_SS_Pinv_block_blockrow<T>(
                 state_size, knot_points,
-                d_S, d_Pinv, d_T,
-                s_temp, blockrow, org_trans);
+                d_S, d_Pinv, d_H, d_T,
+                s_temp, blockrow, org_trans, use_H);
     }
 }
 
@@ -813,11 +905,10 @@ void transform_lamdba(uint32_t state_size, uint32_t knot_points,
 }
 
 template<typename T>
-void form_schur_system_block(
-        uint32_t state_size, uint32_t control_size, uint32_t knot_points,
-        T *d_G_dense, T *d_C_dense, T *d_g, T *d_c,
-        T *d_S, T *d_Pinv, T *d_T, T *d_gamma,
-        T rho, bool org_trans, bool chol_or_ldl) {
+void form_schur_system_block(uint32_t state_size, uint32_t control_size, uint32_t knot_points,
+                             T *d_G_dense, T *d_C_dense, T *d_g, T *d_c,
+                             T *d_S, T *d_Pinv, T *d_H, T *d_T, T *d_gamma,
+                             T rho, bool org_trans, bool chol_or_ldl, bool use_H) {
     // shared block memory summary (timeline & types)
 
     // previous setup
@@ -834,11 +925,10 @@ void form_schur_system_block(
                                               3 * state_size + 1);
 
     void *kernel = (void *) form_S_gamma_Pinv_block_kernel<T>;
-    void *args[] = {
-            (void *) &state_size, (void *) &control_size, (void *) &knot_points,
-            (void *) &d_G_dense, (void *) &d_C_dense, (void *) &d_g, (void *) &d_c,
-            (void *) &d_S, (void *) &d_Pinv, (void *) &d_T, (void *) &d_gamma,
-            (void *) &rho, (void *) &org_trans, (void *) &chol_or_ldl
+    void *args[] = {(void *) &state_size, (void *) &control_size, (void *) &knot_points,
+                    (void *) &d_G_dense, (void *) &d_C_dense, (void *) &d_g, (void *) &d_c,
+                    (void *) &d_S, (void *) &d_Pinv, (void *) &d_H, (void *) &d_T, (void *) &d_gamma,
+                    (void *) &rho, (void *) &org_trans, (void *) &chol_or_ldl, (void *) &use_H
     };
 
     gpuErrchk(cudaLaunchCooperativeKernel(kernel, knot_points, SCHUR_THREADS, args, s_temp_size));
