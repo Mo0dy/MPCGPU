@@ -6,8 +6,8 @@
 #include "utils/matrix.cuh"
 
 // d_Pinv: diagonal blocks ready, off-diagonal blocks to be computed
-// d_S: diagonal blocks ready, off-diagonal blocks are half-ready
-// d_T: all ready
+// d_S: diagonal blocks ready, off-diagonal blocks are half-ready (for TRANS) or ready (for ORG)
+// d_T: all ready (for TRANS, ORG not applicable)
 // d_gamma: not used, so not passed in
 
 template<typename T>
@@ -27,130 +27,126 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
         T *d_Pinvdb = d_Pinv;
         T *d_Pinvob = d_Pinv + knot_points * state_size;
 
-        // shared block memory usage: 3nx^2 + nx(nx+1)/2 + 2nx
+        // shared block memory usage: 4nx^2 + 3nx
 
-        T *s_T_k = s_temp;
-        T *s_T_km1 = s_T_k;                         // T_k and T_km1 share (nx+1)nx/2
-        T *s_phi_k = s_T_km1 + triangular_state;
-        T *s_phi_kp1_T = s_phi_k;                   // phi_k and phi_kp1_T share nx^2
-        T *s_O_k = s_phi_kp1_T + states_sq;
-        T *S_O_km1_T = s_O_k;                       // O_k and O_km1_T share nx^2
-        T *s_DInv_k = S_O_km1_T + states_sq;
-        T *s_DInv_km1 = s_DInv_k + state_size;      // DInv_k is not shared, size = nx
-        T *s_DInv_kp1 = s_DInv_km1;                 // DInv_km1 and DInv_kp1 share nx
-        T *s_PhiInv_k_R = s_DInv_kp1 + state_size;
-        T *s_PhiInv_k_L = s_PhiInv_k_R;             // PhiInv_k_R and PhiInv_k_L share nx^2
-        T *s_end = s_PhiInv_k_L + states_sq;
+        T *s_M1 = s_temp;
+        T *s_M2 = s_M1 + states_sq;
+        T *s_M3 = s_M2 + states_sq;
+        T *s_M4 = s_M3 + states_sq;
+        T *s_v1 = s_M4 + states_sq;
+        T *s_v2 = s_v1 + state_size;
+        T *s_v3 = s_v2 + state_size;
+        T *s_end = s_v3 + state_size;
 
-        // load s_DInv_k
+        // load tilde_Dk_inv to v1
         load_block_db<T>(state_size, knot_points,
-                         d_Pinvdb,       // src
-                         s_DInv_k,       // dst
-                         blockrow        // blockrow
+                         d_Pinvdb,          // src
+                         s_v1,              // dst
+                         blockrow           // blockrow
         );
 
         if (blockrow != lastrow) {
-            // load s_T_k
+            // load Tk to M1. Note only the first triangular_state part of M1 is used.
             for (unsigned ind = threadIdx.x; ind < triangular_state; ind += blockDim.x) {
                 unsigned offset = blockrow * triangular_state + ind;
-                s_T_k[ind] = d_T[offset];
+                s_M1[ind] = d_T[offset];
             }
-            // load s_phi_kp1_T
+            // load Ok * Tkp1' to M2
             load_block_ob<T>(state_size, knot_points,
-                             d_Sob,              // src
-                             s_phi_kp1_T,        // dst
-                             0,                  // block column (0 or 1)
-                             blockrow + 1,       // blockrow
-                             true                // transpose
+                             d_Sob,         // src
+                             s_M2,          // dst
+                             0,             // left block column
+                             blockrow + 1,  // blockrow
+                             true           // transpose
             );
 
-            // compute s_O_k
+            // M3 <- M1 * M2 = Tk * Ok * Tkp1' = tilde_Ok
             __syncthreads();
-            glass::trmm_left<T, false>(state_size, state_size, static_cast<T>(1), s_T_k, s_phi_kp1_T, s_O_k);
+            glass::trmm_left<T, false>(state_size, state_size, static_cast<T>(1), s_M1, s_M2, s_M3);
 
-            // save s_O_k to S (right diagonal)
+            // save M3 = tilde_Ok to S (right diagonal)
+            __syncthreads();
             store_block_ob<T>(state_size, knot_points,
-                              s_O_k,        // src
+                              s_M3,         // src
                               d_Sob,        // dst
-                              1,            // block column (0 or 1)
+                              1,            // right block column
                               blockrow,     // blockrow
                               1             // positive
             );
 
-            // load s_DInv_kp1
+            // load tilde_Dkp1_inv to v2
             load_block_db<T>(state_size, knot_points,
                              d_Pinvdb,      // src
-                             s_DInv_kp1,    // dst
+                             s_v2,          // dst
                              blockrow + 1   // blockrow
             );
 
+            // M2 <- v1 * M3 (v1 is diagonal matrix) = tilde_Dk_inv * tilde_Ok
+            glass::dimm_left<T>(state_size, state_size, static_cast<T>(1.0), s_v1, s_M3, s_M2);
+            // M4 <- v2 * M2 (v2 is diagonal matrix) = tilde_Dk_inv * tilde_Ok * tilde_Dkp1_inv = tilde_Ek
             __syncthreads();
+            glass::dimm_right<T>(state_size, state_size, static_cast<T>(1.0), s_v2, s_M2, s_M4);
 
-            // calculate right diag in Pinv
-            // no need to __syncthreads() between 2 dimm because s_DInv_k & s_DInv_kp1 are both diagonal so order doesn't matter
-            // use s_phi_k for scratching
-            glass::dimm_left<T>(state_size, state_size, static_cast<T>(1.0), s_DInv_k, s_O_k, s_phi_k);
-            glass::dimm_right<T>(state_size, state_size, static_cast<T>(1.0), s_DInv_kp1, s_phi_k, s_PhiInv_k_R);
-
-            // store right diagonal in Pinv
+            // save -M4 = -tilde_Ek to Pinv (right diagonal)
+            __syncthreads();
             store_block_ob<T>(state_size, knot_points,
-                              s_PhiInv_k_R,     // src
-                              d_Pinvob,         // dst
-                              1,                // block column (0 or 1)
-                              blockrow,         // blockrow
-                              -1                // negative
+                              s_M4,         // src
+                              d_Pinvob,     // dst
+                              1,            // right block column
+                              blockrow,     // blockrow
+                              -1            // negative
             );
         }
 
         if (blockrow != 0) {
-            // load s_T_km1
+            // load Tkm1 to M1. Note only the first triangular_state part of M1 is used.
             for (unsigned ind = threadIdx.x; ind < triangular_state; ind += blockDim.x) {
                 unsigned offset = (blockrow - 1) * triangular_state + ind;
-                s_T_km1[ind] = d_T[offset];
+                s_M1[ind] = d_T[offset];
             }
-            // load phi_k
+            // load Tk * Okm1' to M2
             load_block_ob<T>(state_size, knot_points,
-                             d_Sob,     // src
-                             s_phi_k,   // dst
-                             0,         // block column (0 or 1)
-                             blockrow   // block row
+                             d_Sob,         // src
+                             s_M2,          // dst
+                             0,             // left block column
+                             blockrow       // block row
             );
 
-            // compute s_O_km1_T
+            // M3 <- M2 * M1 = Tk * Okm1' * Tkm1' = tilde_Okm1'. Note trmm_right and transpose=true.
             __syncthreads();
-            glass::trmm_right<T, true>(state_size, state_size, static_cast<T>(1), s_T_km1, s_phi_k, S_O_km1_T);
+            glass::trmm_right<T, true>(state_size, state_size, static_cast<T>(1), s_M1, s_M2, s_M3);
 
-            // save s_O_km1_T to S (left diagonal)
+            // save M3 = tilde_Okm1' to S (left diagonal)
+            __syncthreads();
             store_block_ob<T>(state_size, knot_points,
-                              S_O_km1_T,    // src
+                              s_M3,         // src
                               d_Sob,        // dst
-                              0,            // block column (0 or 1)
+                              0,            // left block column
                               blockrow,     // blockrow
                               1             // positive
             );
 
-            // load s_DInv_km1
+            // load tilde_Dkm1_inv to v3
             load_block_db<T>(state_size, knot_points,
                              d_Pinvdb,      // src
-                             s_DInv_km1,    // dst
+                             s_v3,          // dst
                              blockrow - 1   // blockrow
             );
 
+            // M2 <- v1 * M3 (v1 is diagonal matrix) = tilde_Dk_inv * tilde_Okm1'
+            glass::dimm_left<T>(state_size, state_size, static_cast<T>(1.0), s_v1, s_M3, s_M2);
+            // M4 <- v3 * M2 (v3 is diagonal matrix) = tilde_Dk_inv * tilde_Okm1' * tilde_Dkm1_inv = tilde_Ekm1'
             __syncthreads();
+            glass::dimm_right<T>(state_size, state_size, static_cast<T>(1.0), s_v3, s_M2, s_M4);
 
-            // compute left off diag for Pinv
-            // no need to __syncthreads() between 2 dimm because s_DInv_k & s_DInv_km1 are both diagonal so order doesn't matter
-            // use s_phi_k for scratching
-            glass::dimm_left<T>(state_size, state_size, static_cast<T>(1.0), s_DInv_k, S_O_km1_T, s_phi_k);
-            glass::dimm_right<T>(state_size, state_size, static_cast<T>(1.0), s_DInv_km1, s_phi_k, s_PhiInv_k_L);
-
-            // store left diagonal in Pinv
+            // save -M4 = -tilde_Ekm1' to Pinv (left diagonal)
+            __syncthreads();
             store_block_ob<T>(state_size, knot_points,
-                              s_PhiInv_k_L,     // src
-                              d_Pinvob,         // dst
-                              0,                // block column (0 or 1)
-                              blockrow,         // blockrow
-                              -1                // negative
+                              s_M4,         // src
+                              d_Pinvob,     // dst
+                              0,            // left block column
+                              blockrow,     // blockrow
+                              -1            // negative
             );
         }
     } else {
@@ -166,85 +162,85 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
         if (blockrow != lastrow) {
             // load thetaInv_k = Dk_inv to M1
             load_block_bd<T>(state_size, knot_points,
-                             d_Pinv,
-                             s_M1,
-                             1,
-                             blockrow
+                             d_Pinv,        // src
+                             s_M1,          // dst
+                             1,             // middle block column
+                             blockrow       // blockrow
             );
 
             // load phi_kp1_T = Ok to M2
             load_block_bd<T>(state_size, knot_points,
-                             d_S,                // src
-                             s_M2,               // dst
-                             0,                  // block column (0, 1, or 2)
-                             blockrow + 1,       // block row
-                             true                // transpose
+                             d_S,           // src
+                             s_M2,          // dst
+                             0,             // left block column
+                             blockrow + 1,  // block row
+                             true           // transpose
             );
-            __syncthreads();
 
             // M3 <- M1 * M2 = thetaInv_k * phi_kp1_T = Dk_inv * Ok
-            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M2, s_M3);
             __syncthreads();
+            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M2, s_M3);
 
             // load thetaInv_kp1 = Dkp1_inv to M1
-            load_block_bd<T>(state_size, knot_points,
-                             d_Pinv,
-                             s_M1,
-                             1,
-                             blockrow + 1
-            );
             __syncthreads();
+            load_block_bd<T>(state_size, knot_points,
+                             d_Pinv,        // src
+                             s_M1,          // dst
+                             1,             // middle block column
+                             blockrow + 1   // blockrow
+            );
 
             // M4 <- M3 * M1 = thetaInv_k * phi_kp1_T * thetaInv_kp1
             // M4 = Ek = Dk_inv * Ok * Dkp1_inv
-            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M3, s_M1, s_M4);
             __syncthreads();
+            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M3, s_M1, s_M4);
 
             // save -M4 = -Ek to Pinv
+            __syncthreads();
             store_block_bd<T>(state_size, knot_points,
-                              s_M4,
-                              d_Pinv,
-                              2,
-                              blockrow,
+                              s_M4,         // src
+                              d_Pinv,       // dst
+                              2,            // right block column
+                              blockrow,     // blockrow
                               -1            // negative
             );
 
             if (use_H) {
                 // M1 <- M4 * M2' = Ek * Ok'
                 glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M1);
-                __syncthreads();
 
                 // save M1 = Ek * Ok' to H, will be read again in the general case
+                __syncthreads();
                 store_block_bd<T>(state_size, knot_points,
-                                  s_M1,
-                                  d_H,
-                                  1,            // middle
-                                  blockrow,
-                                  1
+                                  s_M1,     // src
+                                  d_H,      // dst
+                                  1,        // middle block column
+                                  blockrow, // blockrow
+                                  1         // positive
                 );
 
                 if (blockrow != lastrow - 1) {
                     // load phi_kp2_T = Okp1 to M2
                     load_block_bd<T>(state_size, knot_points,
-                                     d_S,                // src
-                                     s_M2,               // dst
-                                     0,                  // block column (0, 1, or 2)
-                                     blockrow + 2,       // block row
-                                     true                // transpose
+                                     d_S,           // src
+                                     s_M2,          // dst
+                                     0,             // left block column
+                                     blockrow + 2,  // block row
+                                     true           // transpose
                     );
-                    __syncthreads();
 
                     // M3 <- M4 * M2 = Ek * Okp1
-                    glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M3);
                     __syncthreads();
+                    glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M3);
 
                     // save M3 = Ek * Okp1 to H
+                    __syncthreads();
                     store_block_bd<T>(state_size, knot_points,
-                                      s_M3,
-                                      d_H,
-                                      2,            // right
-                                      blockrow,
-                                      1
+                                      s_M3,         // src
+                                      d_H,          // dst
+                                      2,            // right block column
+                                      blockrow,     // blockrow
+                                      1             // positive
                     );
                 }
             }
@@ -253,60 +249,60 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
         if (blockrow != 0) {
             // load thetaInv_k = Dk_inv to M1
             load_block_bd<T>(state_size, knot_points,
-                             d_Pinv,
-                             s_M1,
-                             1,
-                             blockrow
+                             d_Pinv,        // src
+                             s_M1,          // dst
+                             1,             // middle block column
+                             blockrow       // blockrow
             );
 
             // load phi_k = Okm1_T to M2
             load_block_bd<T>(state_size, knot_points,
-                             d_S,
-                             s_M2,
-                             0,
-                             blockrow
+                             d_S,       // src
+                             s_M2,      // dst
+                             0,         // left block column
+                             blockrow   // blockrow
             );
-            __syncthreads();
 
             // M3 <- M1 * M2 = thetaInv_k * phi_k = Dk_inv * Okm1_T
-            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M2, s_M3);
             __syncthreads();
+            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M2, s_M3);
 
             // load thetaInv_km1 = Dkm1_inv to M1
-            load_block_bd<T>(state_size, knot_points,
-                             d_Pinv,
-                             s_M1,
-                             1,
-                             blockrow - 1
-            );
             __syncthreads();
+            load_block_bd<T>(state_size, knot_points,
+                             d_Pinv,        // src
+                             s_M1,          // dst
+                             1,             // middle block column
+                             blockrow - 1   // blockrow
+            );
 
             // M4 <- M3 * M1 = thetaInv_k * phi_k * thetaInv_km1
             // M4 = Ekm1_T = Dk_inv * Okm1_T * Dkm1_inv
-            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M3, s_M1, s_M4);
             __syncthreads();
+            glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M3, s_M1, s_M4);
 
             // save -M4 = -Ekm1_T to Pinv
+            __syncthreads();
             store_block_bd<T>(state_size, knot_points,
-                              s_M4,
-                              d_Pinv,
-                              0,
-                              blockrow,
-                              -1            // negative
+                              s_M4,     // src
+                              d_Pinv,   // dst
+                              0,        // left block column
+                              blockrow, // blockrow
+                              -1        // negative
             );
 
             if (use_H) {
                 // M1 <- M4 * M2' = Ekm1_T * Okm1
                 glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M1);
-                __syncthreads();
 
                 if (blockrow != lastrow) {
                     // load M2 = Ek * Ok' (has been calculated before) from H
+                    __syncthreads();
                     load_block_bd<T>(state_size, knot_points,
-                                     d_H,
-                                     s_M2,
-                                     1,            // middle
-                                     blockrow
+                                     d_H,       // src
+                                     s_M2,      // dst
+                                     1,         // middle block column
+                                     blockrow   // blockrow
                     );
                     // M1 <- M1 + M2 = Ekm1_T * Okm1 + Ek * Ok'
                     for (unsigned ind = threadIdx.x; ind < states_sq; ind += blockDim.x) {
@@ -315,35 +311,36 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
                 }
 
                 // save M1 = Ekm1_T * Okm1 (lastrow) or Ekm1_T * Okm1 + Ek * Ok' to H
+                __syncthreads();
                 store_block_bd<T>(state_size, knot_points,
-                                  s_M1,
-                                  d_H,
-                                  1,            // middle
-                                  blockrow,
-                                  1
+                                  s_M1,     // src
+                                  d_H,      // dst
+                                  1,        // middle block column
+                                  blockrow, // blockrow
+                                  1         // positive
                 );
 
                 if (blockrow != 1) {
                     // load phi_km1 = Okm2_T to M2
                     load_block_bd<T>(state_size, knot_points,
-                                     d_S,
-                                     s_M2,
-                                     0,
-                                     blockrow - 1
+                                     d_S,           // src
+                                     s_M2,          // dst
+                                     0,             // left block column
+                                     blockrow - 1   // blockrow
                     );
-                    __syncthreads();
 
                     // M3 <- M4 * M2 = Ekm1_T * Okm2_T
-                    glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M3);
                     __syncthreads();
+                    glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(1.0), s_M4, s_M2, s_M3);
 
                     // save M3 = Ekm1_T * Okm2_T to H
+                    __syncthreads();
                     store_block_bd<T>(state_size, knot_points,
-                                      s_M3,
-                                      d_H,
-                                      0,            // left
-                                      blockrow,
-                                      1
+                                      s_M3,     // src
+                                      d_H,      // dst
+                                      0,        // left block column
+                                      blockrow, // blockrow
+                                      1         // positive
                     );
                 }
             }
@@ -445,6 +442,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
             }
 
             // save v1 = \tilde{D}_k to main diagonal S
+            __syncthreads();
             store_block_db<T>(state_size, knot_points,
                               s_v1,
                               d_Sdb,
@@ -490,9 +488,9 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
             // ORG
             // note: after inversion, M1 is no longer Q0, so reload.
             glass::copy<T>(state_sq, d_G, s_M1);
-            __syncthreads();
 
             // save M1 = Q0 to Pinv
+            __syncthreads();
             store_block_bd<T>(state_size, knot_points,
                               s_M1,         // src
                               d_Pinv,       // dst
@@ -693,6 +691,7 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
             }
 
             // save v1 = \tilde{D}_k to main diagonal S
+            __syncthreads();
             store_block_db<T>(state_size, knot_points,
                               s_v1,
                               d_Sdb,
@@ -737,15 +736,15 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
                 d_gamma[offset] = s_v1[ind];
             }
 
-            // M3 <- M2 * M1 = Tk * phi_k
+            // M3 <- M2 * M1 = Tk * phi_k = Tk * Okm1'
             glass::trmm_left<T, false>(state_size, state_size, static_cast<T>(1), s_M2, s_M1, s_M3);
             __syncthreads();
 
-            // save M3 = Tk * phi_k into left off-diagonal of S
+            // save M3 = Tk * phi_k = Tk * Okm1' into left off-diagonal of S
             store_block_ob<T>(state_size, knot_points,
                               s_M3,         // src
                               d_Sob,        // dst
-                              0,            // col = 0 or 1
+                              0,            // left block column
                               blockrow,     // blockrow
                               1             // positive
             );
@@ -753,50 +752,50 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
             // load identity to M1
             loadIdentity<T>(state_size, s_M1);
             __syncthreads();
-            // M2 <- M1 * M3' = I * (Tk * phi_k)' = phi_k' * Tk'
+            // M2 <- M1 * M3' = I * (Tk * phi_k)' = phi_k' * Tk' = Okm1 * Tk'
             glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M3, s_M2);
 
-            // save phi_k' * T_k' into right off-diagonal of S
+            // save phi_k' * T_k' = Okm1 * Tk' into right off-diagonal of S
             __syncthreads();
             store_block_ob<T>(state_size, knot_points,
                               s_M2,         // src
                               d_Sob,        // dst
-                              1,            // col = 0 or 1
+                              1,            // right block column
                               blockrow - 1, // blockrow
                               1             // positive
             );
         } else {
             // ORG
 
-            // save M1 = phi_k to S
+            // save M1 = phi_k = Okm1' to S
             store_block_bd<T>(state_size, knot_points,
                               s_M1,         // src
                               d_S,          // dst
-                              0,            // col
+                              0,            // left block column
                               blockrow,     // blockrow
                               1             // positive
             );
 
             loadIdentity<T>(state_size, s_M2);
             __syncthreads();
-            // M3 <- M2 * M1' = I * phi_k' = phi_k'
+            // M3 <- M2 * M1' = I * phi_k' = phi_k' = Okm1
             glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M2, s_M1, s_M3);
             __syncthreads();
 
-            // save M3 = phi_k' to S
+            // save M3 = phi_k' = Okm1 to S
             store_block_bd<T>(state_size, knot_points,
                               s_M3,         // src
                               d_S,          // dst
-                              2,            // col
+                              2,            // right block column
                               blockrow - 1, // blockrow
                               1             // positive
             );
 
-            // save M4 = theta_k to S
+            // save M4 = theta_k = Dk to S
             store_block_bd<T>(state_size, knot_points,
                               s_M4,         // src
                               d_S,          // dst
-                              1,            // col
+                              1,            // middle block column
                               blockrow,     // blockrow
                               1             // positive
             );
@@ -806,16 +805,16 @@ void form_S_gamma_and_jacobi_Pinv_block_blockrow(uint32_t state_size, uint32_t c
             for (unsigned ind = threadIdx.x; ind < state_sq; ind += blockDim.x) {
                 s_M1[ind] = s_M4[ind];
             }
+            // invert M1 = theta_k, M2 <- inv(M1) = theta_k_inv = Dk_inv
             __syncthreads();
-            // invert M1 = theta_k, M2 <- inv(M1) = theta_k_inv
             invertMatrix<T>(state_size, s_M1, s_v1);
-            __syncthreads();
 
-            // save M2 = theta_k_inv to Pinv
+            // save M2 = theta_k_inv = Dk_inv to Pinv
+            __syncthreads();
             store_block_bd<T>(state_size, knot_points,
                               s_M2,         // src
                               d_Pinv,       // dst
-                              1,            // col
+                              1,            // middle block column
                               blockrow,     // blockrow
                               1             // positive
             );
