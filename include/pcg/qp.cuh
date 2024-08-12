@@ -80,6 +80,7 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
     bool use_H = config.pcg_poly_order > 0;
     if (use_H) {
         gpuErrchk(cudaMalloc(&d_H, 3 * Nnx2_T));
+//        cudaMemset(d_H, 0, 3 * Nnx2_T);
     }
 
     T *d_gamma, *d_lambda;
@@ -162,6 +163,12 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
 
     gpuErrchk(cudaFree(d_S));
     gpuErrchk(cudaFree(d_Pinv));
+    if (use_H) {
+        gpuErrchk(cudaFree(d_H));
+    }
+    if (config.pcg_org_trans) {
+        gpuErrchk(cudaFree(d_T));
+    }
     gpuErrchk(cudaFree(d_gamma));
     gpuErrchk(cudaFree(d_lambda));
 

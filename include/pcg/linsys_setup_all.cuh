@@ -5,6 +5,96 @@
 #include "glass.cuh"
 #include "utils/matrix.cuh"
 
+// only for TRANS and use_H
+// the diagonal blocks of d_H are ready
+// compute the off-diagonal blocks for d_H, using d_Pinv and d_S
+template<typename T>
+__device__
+void complete_H_block_blockrow(uint32_t state_size, uint32_t knot_points,
+                               T *d_S, T *d_Pinv, T *d_H,
+                               T *s_temp, unsigned blockrow) {
+    const unsigned lastrow = knot_points - 1;
+    const uint32_t states_sq = state_size * state_size;
+
+    T *d_Sob = d_S + knot_points * state_size;
+    T *d_Pinvob = d_Pinv + knot_points * state_size;
+
+    // shared block memory usage: 3nx^2
+
+    T *s_M1 = s_temp;
+    T *s_M2 = s_M1 + states_sq;
+    T *s_M3 = s_M2 + states_sq;
+    T *s_end = s_M3 + states_sq;
+
+    if (blockrow > 1) {
+        // not first two block rows
+
+        // load -tilde_Ekm1' to M1
+        load_block_ob<T>(state_size, knot_points,
+                         d_Pinvob,      // src
+                         s_M1,          // dst
+                         0,             // left block column
+                         blockrow       // blockrow
+        );
+
+        // load tilde_Okm2' to M2
+        load_block_ob<T>(state_size, knot_points,
+                         d_Sob,         // src
+                         s_M2,          // dst
+                         0,             // left block column
+                         blockrow - 1   // blockrow
+        );
+
+        // M3 <- (-1) * -M1 * M2 = tilde_Ekm1' * tilde_Okm2'
+        __syncthreads();
+        glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(-1.0), s_M1, s_M2, s_M3);
+
+        // save M3 = tilde_Ekm1' * tilde_Okm2' to H
+        __syncthreads();
+        store_block_bd<T>(state_size, knot_points,
+                          s_M3,     // src
+                          d_H,      // dst
+                          0,        // left block column
+                          blockrow, // blockrow
+                          1         // positive
+        );
+    }
+
+    if (blockrow < lastrow - 1) {
+        // not last two block rows
+
+        // load -tilde_Ek to M1
+        load_block_ob<T>(state_size, knot_points,
+                         d_Pinvob,      // src
+                         s_M1,          // dst
+                         1,             // right block column
+                         blockrow       // blockrow
+        );
+
+        // load tilde_Okp1 to M2
+        load_block_ob<T>(state_size, knot_points,
+                         d_Sob,         // src
+                         s_M2,          // dst
+                         1,             // right block column
+                         blockrow + 1   // block row
+        );
+
+        // M3 <- (-1) * -M1 * M2 = tilde_Ek * tilde_Okp1
+        __syncthreads();
+        glass::gemm<T>(state_size, state_size, state_size, static_cast<T>(-1.0), s_M1, s_M2, s_M3);
+
+        // save M3 = tilde_Ek * tilde_Okp1 to H
+        __syncthreads();
+        store_block_bd<T>(state_size, knot_points,
+                          s_M3,         // src
+                          d_H,          // dst
+                          2,            // right block column
+                          blockrow,     // blockrow
+                          1             // positive
+        );
+    }
+}
+
 // d_Pinv: diagonal blocks ready, off-diagonal blocks to be computed
 // d_S: diagonal blocks ready, off-diagonal blocks are half-ready (for TRANS) or ready (for ORG)
 // d_T: all ready (for TRANS, ORG not applicable)
@@ -83,19 +173,35 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
 
             // M2 <- v1 * M3 (v1 is diagonal matrix) = tilde_Dk_inv * tilde_Ok
             glass::dimm_left<T>(state_size, state_size, static_cast<T>(1.0), s_v1, s_M3, s_M2);
-            // M4 <- v2 * M2 (v2 is diagonal matrix) = tilde_Dk_inv * tilde_Ok * tilde_Dkp1_inv = tilde_Ek
+            // M1 <- v2 * M2 (v2 is diagonal matrix) = tilde_Dk_inv * tilde_Ok * tilde_Dkp1_inv = tilde_Ek
             __syncthreads();
-            glass::dimm_right<T>(state_size, state_size, static_cast<T>(1.0), s_v2, s_M2, s_M4);
+            glass::dimm_right<T>(state_size, state_size, static_cast<T>(1.0), s_v2, s_M2, s_M1);
 
-            // save -M4 = -tilde_Ek to Pinv (right diagonal)
+            // save -M1 = -tilde_Ek to Pinv (right diagonal)
             __syncthreads();
             store_block_ob<T>(state_size, knot_points,
-                              s_M4,         // src
+                              s_M1,         // src
                               d_Pinvob,     // dst
                               1,            // right block column
                               blockrow,     // blockrow
                               -1            // negative
             );
+
+            if (use_H) {
+                // M4 <- M1 * M3' = tilde_Ek * tilde_Ok'
+                glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M3, s_M4);
+                __syncthreads();
+                if (blockrow == 0) {
+                    // save M4 = tilde_Ek * tilde_Ok' to H
+                    store_block_bd<T>(state_size, knot_points,
+                                      s_M4,     // src
+                                      d_H,      // dst
+                                      1,        // middle block column
+                                      blockrow, // blockrow
+                                      1         // positive
+                    );
+                }
+            }
         }
 
         if (blockrow != 0) {
@@ -135,19 +241,40 @@ void complete_SS_Pinv_block_blockrow(uint32_t state_size, uint32_t knot_points,
 
             // M2 <- v1 * M3 (v1 is diagonal matrix) = tilde_Dk_inv * tilde_Okm1'
             glass::dimm_left<T>(state_size, state_size, static_cast<T>(1.0), s_v1, s_M3, s_M2);
-            // M4 <- v3 * M2 (v3 is diagonal matrix) = tilde_Dk_inv * tilde_Okm1' * tilde_Dkm1_inv = tilde_Ekm1'
+            // M1 <- v3 * M2 (v3 is diagonal matrix) = tilde_Dk_inv * tilde_Okm1' * tilde_Dkm1_inv = tilde_Ekm1'
             __syncthreads();
-            glass::dimm_right<T>(state_size, state_size, static_cast<T>(1.0), s_v3, s_M2, s_M4);
+            glass::dimm_right<T>(state_size, state_size, static_cast<T>(1.0), s_v3, s_M2, s_M1);
 
-            // save -M4 = -tilde_Ekm1' to Pinv (left diagonal)
+            // save -M1 = -tilde_Ekm1' to Pinv (left diagonal)
             __syncthreads();
             store_block_ob<T>(state_size, knot_points,
-                              s_M4,         // src
+                              s_M1,         // src
                               d_Pinvob,     // dst
                               0,            // left block column
                               blockrow,     // blockrow
                               -1            // negative
             );
+
+            if (use_H) {
+                // M2 <- M1 * M3' = tilde_Ekm1' * tilde_Okm1
+                glass::gemm<T, true>(state_size, state_size, state_size, static_cast<T>(1.0), s_M1, s_M3, s_M2);
+                if (blockrow != lastrow) {
+                    // M2 <- M2 + M4 = Ekm1_T * Okm1 + Ek * Ok'
+                    __syncthreads();
+                    for (unsigned ind = threadIdx.x; ind < states_sq; ind += blockDim.x) {
+                        s_M2[ind] += s_M4[ind];
+                    }
+                }
+                // save M2 = Ekm1_T * Okm1 (lastrow) or Ekm1_T * Okm1 + Ek * Ok' to H
+                __syncthreads();
+                store_block_bd<T>(state_size, knot_points,
+                                  s_M2,     // src
+                                  d_H,      // dst
+                                  1,        // middle block column
+                                  blockrow, // blockrow
+                                  1         // positive
+                );
+            }
         }
     } else {
         // ORG
@@ -853,6 +980,16 @@ void form_S_gamma_Pinv_block_kernel(uint32_t state_size, uint32_t control_size, 
                 state_size, knot_points,
                 d_S, d_Pinv, d_H, d_T,
                 s_temp, blockrow, org_trans, use_H);
+    }
+
+    if (use_H && org_trans) {
+        // TRANS and use_H, one more grid sync needed
+        cgrps::this_grid().sync();
+        for (unsigned blockrow = blockIdx.x; blockrow < knot_points; blockrow += gridDim.x) {
+            complete_H_block_blockrow<T>(state_size, knot_points,
+                                         d_S, d_Pinv, d_H,
+                                         s_temp, blockrow);
+        }
     }
 }
 

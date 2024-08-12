@@ -11,7 +11,7 @@
 close all
 clear
 digits(16)
-N = 10;
+N = 25;
 nx = 20;
 nu = 1;
 
@@ -100,7 +100,8 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
 
     [D, O, S] = formKKTSchur(A, B, Q, R, N);
     [~, ~, P] = formPreconditionerSS(D, O, N, nx);
-%     [~, ~, ~, H] = formPolyPreconditionerH(D, O, N, nx);
+    [~, ~, ~, H] = formPolyPreconditionerH(D, O, N, nx);
+%     disp('org H')
 %     disp(H)
 %     disp('S original')
 %     disp(S)
@@ -108,6 +109,14 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
 
     [D_t_ldl, O_t_ldl, S_t_ldl, T_ldl] = preprocessSLDL(D, O, N, nx);
     [D_t_chol, O_t_chol, S_t_chol, T_chol] = preprocessSChol(D, O, N, nx);
+    
+    [~, ~, ~, H_ldl] = formPolyPreconditionerH(D_t_ldl, O_t_ldl, N, nx);
+%     disp('trans H ldl')
+%     disp(H_ldl)
+    [~, ~, ~, H_chol] = formPolyPreconditionerH(D_t_chol, O_t_chol, N, nx);
+%     disp('trans H chol')
+%     disp(H_chol)
+    
 %     disp('S_t_ldl')
 %     disp(S_t_ldl)
 %     for i=1:N
@@ -117,6 +126,8 @@ function [G_dense, C_dense, g, c, xu_gt, x, u] = schurSolve(A, B, b, Q, R, q, r,
     [~, ~, P_t_chol] = formPreconditionerSS(D_t_chol, O_t_chol, N, nx);
 %     disp('P_t_ldl')
 %     disp(P_t_ldl)
+%     disp('P_t_chol')
+%     disp(P_t_chol)
     % plotSpectrum(P_t, S_t)
     
     N = N-1;

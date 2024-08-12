@@ -10,10 +10,10 @@ examples: qp_trans_ldl.exe qp_trans_chol.exe
 # make sure the KNOT_POINTS = N, STATE_SIZE = nx, CONTROL_SIZE = nu match the settings in ocpqp.m file
 
 qp_trans_ldl.exe:
-	$(NVCC) $(CFLAGS) -DKNOT_POINTS=10 -DSTATE_SIZE=20 -DCONTROL_SIZE=1 -DCHOL_OR_LDL=false qp_solve.cu -o qp_trans_ldl.exe
+	$(NVCC) $(CFLAGS) -DKNOT_POINTS=25 -DSTATE_SIZE=20 -DCONTROL_SIZE=1 -DCHOL_OR_LDL=false qp_solve.cu -o qp_trans_ldl.exe
 
 qp_trans_chol.exe:
-	$(NVCC) $(CFLAGS) -DKNOT_POINTS=10 -DSTATE_SIZE=20 -DCONTROL_SIZE=1 -DCHOL_OR_LDL=true qp_solve.cu -o qp_trans_chol.exe
+	$(NVCC) $(CFLAGS) -DKNOT_POINTS=25 -DSTATE_SIZE=20 -DCONTROL_SIZE=1 -DCHOL_OR_LDL=true qp_solve.cu -o qp_trans_chol.exe
 
 clean:
 	rm -f qp_trans_ldl.exe qp_trans_chol.exe
