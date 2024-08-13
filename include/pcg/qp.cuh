@@ -103,12 +103,12 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
 
     // form the Schur complement system (S, Pinv, gamma) from
     // the given KKT matrix (G_dense, C_dense, g, c)
-    form_schur_system_block<T>(state_size, control_size, knot_points,
-                               d_G_dense, d_C_dense, d_g, d_c,
-                               d_S, d_Pinv, d_H, d_T,
-                               d_gamma,
-                               rho,
-                               config.pcg_org_trans, chol_or_ldl, use_H);
+    form_schur_system_all<T>(state_size, control_size, knot_points,
+                             d_G_dense, d_C_dense, d_g, d_c,
+                             d_S, d_Pinv, d_H, d_T,
+                             d_gamma,
+                             rho,
+                             config.pcg_org_trans, chol_or_ldl, use_H);
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());
 
