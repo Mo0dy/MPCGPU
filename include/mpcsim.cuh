@@ -209,39 +209,37 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     T *d_eePos;
     gpuErrchk(cudaMalloc(&d_eePos, 6*sizeof(T)));
 
-#if LINSYS_SOLVE == 1
-    pcg_config<T> config;
-    config.pcg_block = PCG_NUM_THREADS;
-    config.pcg_exit_tol = linsys_exit_tol;
-    config.pcg_max_iter = PCG_MAX_ITER;
-#endif
+    #if LINSYS_SOLVE == 1
+        pcg_config<T> config;
+        config.pcg_block = PCG_NUM_THREADS;
+        config.pcg_exit_tol = linsys_exit_tol;
+        config.pcg_max_iter = PCG_MAX_ITER;
+    #endif
 
-    T rho = 1e-3;
-    T rho_reset = 1e-3;
+        T rho = 1e-3;
+        T rho_reset = 1e-3;
 
-#if REMOVE_JITTERS
-	#if LINSYS_SOLVE == 1
-    config.pcg_exit_tol = 1e-11;
-    config.pcg_max_iter = 10000;
-    
-    for(int j = 0; j < 100; j++){
-        sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, 1e-3);
-        gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
-    }
-    rho = 1e-3;
-    config.pcg_exit_tol = linsys_exit_tol;
-    config.pcg_max_iter = PCG_MAX_ITER;
-	#else
-    for(int j = 0; j < 100; j++){
-        sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, 1e-3);
-        gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
-    }
-    rho = 1e-3;
-	#endif
+    #if REMOVE_JITTERS
+    	#if LINSYS_SOLVE == 1
+        config.pcg_exit_tol = 1e-11;
+        config.pcg_max_iter = 10000;
+        
+        for(int j = 0; j < 100; j++){
+            sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, 1e-3);
+            gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
+        }
+        rho = 1e-3;
+        config.pcg_exit_tol = linsys_exit_tol;
+        config.pcg_max_iter = PCG_MAX_ITER;
+    	#else
+        for(int j = 0; j < 100; j++){
+            sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, 1e-3);
+            gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
+        }
+        rho = 1e-3;
+    	#endif
 
-#endif // #if REMOVE_JITTERS
-
-
+    #endif // #if REMOVE_JITTERS
 
     //
     // MPC tracking loop
@@ -251,23 +249,19 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
 
         if (traj_offset == traj_steps){ break; }
 
-
-
-#if LIVE_PRINT_PATH
-        grid::end_effector_positions_kernel<T><<<1,128,144*sizeof(T)>>>(d_eePos, d_xs, grid::NUM_JOINTS, (grid::robotModel<T> *) d_dynmem, 1);
-        gpuErrchk(cudaMemcpy(h_eePos, d_eePos, 6*sizeof(T), cudaMemcpyDeviceToHost));
-        for (uint32_t i = 0; i < 6; i++){
-            std::cout << h_eePos[i] << (i < 5 ? " " : "\n");
-        }
-#endif // #if LIVE_PRINT_PATH
+        #if LIVE_PRINT_PATH
+                grid::end_effector_positions_kernel<T><<<1,128,144*sizeof(T)>>>(d_eePos, d_xs, grid::NUM_JOINTS, (grid::robotModel<T> *) d_dynmem, 1);
+                gpuErrchk(cudaMemcpy(h_eePos, d_eePos, 6*sizeof(T), cudaMemcpyDeviceToHost));
+                for (uint32_t i = 0; i < 6; i++){
+                    std::cout << h_eePos[i] << (i < 5 ? " " : "\n");
+                }
+        #endif // #if LIVE_PRINT_PATH
         
-
-
-#if LINSYS_SOLVE == 1
-        sqp_stats = sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, rho_reset);
-#else 
-	    sqp_stats = sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, rho_reset);
-#endif
+        #if LINSYS_SOLVE == 1
+                sqp_stats = sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, rho_reset);
+        #else 
+        	    sqp_stats = sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, rho_reset);
+        #endif
 
         cur_linsys_iters = std::get<0>(sqp_stats);
         cur_linsys_times = std::get<1>(sqp_stats);
@@ -276,20 +270,17 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         sqp_exits.push_back(std::get<4>(sqp_stats));
         cur_linsys_exits = std::get<5>(sqp_stats);
 
-
-#if CONST_UPDATE_FREQ
-        simulation_time = SIMULATION_PERIOD;
-#else
-        simulation_time = sqp_solve_time_us;
-#endif
+        #if CONST_UPDATE_FREQ
+                simulation_time = SIMULATION_PERIOD;
+        #else
+                simulation_time = sqp_solve_time_us;
+        #endif
         
-
         // simulate traj for current solve time, offset by previous solve time
         simple_simulate<T>(state_size, control_size, knot_points, d_xs, d_xu_old, d_dynmem, timestep, prev_simulation_time, simulation_time);
 
         // old xu = new xu
         gpuErrchk(cudaMemcpy(d_xu_old, d_xu, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
-
 
         time_since_timestep += simulation_time * 1e-6;
 
@@ -346,14 +337,11 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
             time_since_timestep = std::fmod(time_since_timestep, timestep);
         }
         gpuErrchk(cudaMemcpy(d_xu, d_xs, state_size*sizeof(T), cudaMemcpyDeviceToDevice));
-
-
         
         prev_simulation_time = simulation_time;
 
         gpuErrchk(cudaPeekAtLastError());
 
-        
         // record data
         linsys_iters.insert(linsys_iters.end(), cur_linsys_iters.begin(), cur_linsys_iters.end());                      // linsys iters
         linsys_times.insert(linsys_times.end(), cur_linsys_times.begin(), cur_linsys_times.end());          // linsys times
@@ -363,44 +351,39 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         sqp_times.push_back(sqp_solve_time_us);
         sqp_iters.push_back(cur_sqp_iters);
 
-
-#if LIVE_PRINT_STATS
-        if (control_update_step % 1000 == 50){
-            for (uint32_t i = 0; i < state_size; i++){
-                std::cout << h_xs[i] << (i < state_size-1 ? " " : "\n");
+        #if LIVE_PRINT_STATS
+            if (control_update_step % 1000 == 50){
+                for (uint32_t i = 0; i < state_size; i++){
+                    std::cout << h_xs[i] << (i < state_size-1 ? " " : "\n");
+                }
+                #if TIME_LINSYS == 1
+                    std::cout << "linear system solve time:" << std::endl;
+                    printStats<double>(&linsys_times);
+                #endif // #if TIME_LINSYS
+                
+                std::cout << "goal offset [" << traj_offset << "]\n";
+                std::cout << "sqp iters" << std::endl;
+                printStats<uint32_t>(&sqp_iters);
+                std::cout << "sqp times" << std::endl;
+                printStats<double>(&sqp_times);
+                
+                int totalOnes = std::accumulate(linsys_exits.begin(), linsys_exits.end(), 0);
+                double max_iter_pct = (static_cast<double>(totalOnes) / linsys_exits.size());
+                std::cout << "linsys exits for max iter: " << max_iter_pct * 100 << "% of the time\n";
+                if (max_iter_pct > 0.5) {
+                   std::cout << "WARNING: PCG exiting for max iter over 50% of the time" << std::endl;
+                }
+                
+                std::cout << "avg tracking error: " << std::accumulate(tracking_errors.begin(), tracking_errors.end(), 0.0f) / traj_offset << " current error: " << cur_tracking_error << "\n";
+                std::cout << std::endl;
             }
-    #if TIME_LINSYS == 1
-            std::cout << "linear system solve time:" << std::endl;
-            printStats<double>(&linsys_times);
-    #endif // #if TIME_LINSYS
-            std::cout << "goal offset [" << traj_offset << "]\n";
-            std::cout << "sqp iters" << std::endl;
-            printStats<uint32_t>(&sqp_iters);
-            std::cout << "sqp times" << std::endl;
-            printStats<double>(&sqp_times);
-            
-            int totalOnes = std::accumulate(linsys_exits.begin(), linsys_exits.end(), 0);
-            double max_iter_pct = (static_cast<double>(totalOnes) / linsys_exits.size());
-            std::cout << "linsys exits for max iter: " << max_iter_pct * 100 << "% of the time\n";
-            if (max_iter_pct > 0.5) {
-               std::cout << "WARNING: PCG exiting for max iter over 50% of the time" << std::endl;
-            }
-            
-            std::cout << "avg tracking error: " << std::accumulate(tracking_errors.begin(), tracking_errors.end(), 0.0f) / traj_offset << " current error: " << cur_tracking_error << "\n";
-            std::cout << std::endl;
-
-        }
-
-#endif
-
-
+        #endif
     }
-#if SAVE_DATA
-    dump_tracking_data(&linsys_iters, &linsys_exits, &linsys_times, &sqp_times, &sqp_iters, &sqp_exits, &tracking_errors, &tracking_path, 
-            traj_offset, control_update_step, start_state_ind, goal_state_ind, test_iter, test_output_prefix);
-#endif
+    #if SAVE_DATA
+        dump_tracking_data(&linsys_iters, &linsys_exits, &linsys_times, &sqp_times, &sqp_iters, &sqp_exits, &tracking_errors, &tracking_path, 
+                traj_offset, control_update_step, start_state_ind, goal_state_ind, test_iter, test_output_prefix);
+    #endif
     
-
     grid::end_effector_positions_kernel<T><<<1,128,144*sizeof(T)>>>(d_eePos, d_xs, grid::NUM_JOINTS, (grid::robotModel<T> *) d_dynmem, 1);
     gpuErrchk(cudaMemcpy(h_eePos, d_eePos, 6*sizeof(T), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(h_eePos_goal, d_eePos_goal, 6*sizeof(T), cudaMemcpyDeviceToHost));

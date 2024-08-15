@@ -4,6 +4,9 @@
 	#define GATO_PLANT 1
 #endif
 
+#include "gpuassert.cuh"
+#include <cooperative_groups.h>
+
 #if GATO_PLANT == 1
 	// #include "iiwa_plant.cuh"
 	#include "iiwa/iiwa_eepos_plant.cuh"

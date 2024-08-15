@@ -5,7 +5,7 @@ NVCC = nvcc
 CFLAGS = --compiler-options -Wall  -O3 -Iinclude -Iinclude/common -IGLASS  -IGBD-PCG/include  -lqdldl  -Iqdldl/include -Lqdldl/build/out -lcublas
 
 
-examples: examples/pcg.exe examples/qdldl.exe examples/swing_up_pend.exe
+examples: examples/pcg.exe examples/qdldl.exe examples/pend.exe
 
 examples/pcg.exe:
 	$(NVCC) $(CFLAGS) examples/track_iiwa_pcg.cu -o examples/pcg.exe

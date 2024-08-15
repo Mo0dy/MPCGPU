@@ -142,7 +142,7 @@ void integratorAndGradient(uint32_t state_size, uint32_t control_size, T *s_xux,
     T *s_q = s_xux; 	
     T *s_qd = s_q + state_size/2; 		
     T *s_u = s_qd + state_size/2;
-    gato_plant::forwardDynamicsAndGradient<T>(s_dqdd, s_qdd, s_q, s_qd, s_u, s_extra_temp, d_dynMem_const);
+    gato_plant::forwardDynamicsAndGradient<T>(s_dqdd, s_qdd, s_q, s_qd, s_u, s_extra_temp, d_dynMem_const, block);
     block.sync();
     // first compute xnew or error
     if (COMPUTE_INTEGRATOR_ERROR){
