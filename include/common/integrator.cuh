@@ -142,7 +142,7 @@ void integratorAndGradient(uint32_t state_size, uint32_t control_size, T *s_xux,
     T *s_q = s_xux; 	
     T *s_qd = s_q + state_size/2; 		
     T *s_u = s_qd + state_size/2;
-    gato_plant::forwardDynamicsAndGradient<T>(s_dqdd, s_qdd, s_q, s_qd, s_u, s_extra_temp, d_dynMem_const, block);
+    gato_plant::forwardDynamicsAndGradient<T>(s_dqdd, s_qdd, s_q, s_qd, s_u, s_extra_temp, d_dynMem_const);
     block.sync();
     // first compute xnew or error
     if (COMPUTE_INTEGRATOR_ERROR){
@@ -255,10 +255,12 @@ void integrator_host(uint32_t state_size, uint32_t control_size, T *d_xs, T *d_x
 }
 
 template <typename T>
-void just_shift(uint32_t state_size, uint32_t control_size, uint32_t knot_points, T *d_xu){
-    for (uint32_t knot = 0; knot < knot_points-1; knot++){
-        uint32_t stepsize = (state_size+(knot<knot_points-2)*control_size);
-        gpuErrchk(cudaMemcpy(&d_xu[knot*(state_size+control_size)], &d_xu[(knot+1)*(state_size+control_size)], stepsize*sizeof(T), cudaMemcpyDeviceToDevice));
+void just_shift(uint32_t size_1, uint32_t size_2, uint32_t vec_length, T *d_input_vec){
+    uint32_t total_size = size_1 + size_2; // default of state_size + control_size to shift xu trajectories
+    for (uint32_t index = 0; index < vec_length-1; index++){
+        uint32_t stepsize = (size_1+(index<vec_length-2)*size_2); // for xu traj where last state is just state
+        printf("index[%d/%d] with stepsize[%d]\n",index,vec_length-1,stepsize);
+        gpuErrchk(cudaMemcpy(&d_input_vec[index*total_size], &d_input_vec[(index+1)*total_size], stepsize*sizeof(T), cudaMemcpyDeviceToDevice));
     }
 }
 

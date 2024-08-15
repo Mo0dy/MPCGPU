@@ -221,22 +221,22 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
 
     #if REMOVE_JITTERS
     	#if LINSYS_SOLVE == 1
-        config.pcg_exit_tol = 1e-11;
-        config.pcg_max_iter = 10000;
-        
-        for(int j = 0; j < 100; j++){
-            sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, 1e-3);
-            gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
-        }
-        rho = 1e-3;
-        config.pcg_exit_tol = linsys_exit_tol;
-        config.pcg_max_iter = PCG_MAX_ITER;
+            config.pcg_exit_tol = 1e-11;
+            config.pcg_max_iter = 10000;
+            
+            for(int j = 0; j < 100; j++){
+                sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, 1e-3);
+                gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
+            }
+            rho = 1e-3;
+            config.pcg_exit_tol = linsys_exit_tol;
+            config.pcg_max_iter = PCG_MAX_ITER;
     	#else
-        for(int j = 0; j < 100; j++){
-            sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, 1e-3);
-            gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
-        }
-        rho = 1e-3;
+            for(int j = 0; j < 100; j++){
+                sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, 1e-3);
+                gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
+            }
+            rho = 1e-3;
     	#endif
 
     #endif // #if REMOVE_JITTERS
@@ -250,17 +250,17 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         if (traj_offset == traj_steps){ break; }
 
         #if LIVE_PRINT_PATH
-                grid::end_effector_positions_kernel<T><<<1,128,144*sizeof(T)>>>(d_eePos, d_xs, grid::NUM_JOINTS, (grid::robotModel<T> *) d_dynmem, 1);
-                gpuErrchk(cudaMemcpy(h_eePos, d_eePos, 6*sizeof(T), cudaMemcpyDeviceToHost));
-                for (uint32_t i = 0; i < 6; i++){
-                    std::cout << h_eePos[i] << (i < 5 ? " " : "\n");
-                }
+            grid::end_effector_positions_kernel<T><<<1,128,144*sizeof(T)>>>(d_eePos, d_xs, grid::NUM_JOINTS, (grid::robotModel<T> *) d_dynmem, 1);
+            gpuErrchk(cudaMemcpy(h_eePos, d_eePos, 6*sizeof(T), cudaMemcpyDeviceToHost));
+            for (uint32_t i = 0; i < 6; i++){
+                std::cout << h_eePos[i] << (i < 5 ? " " : "\n");
+            }
         #endif // #if LIVE_PRINT_PATH
         
         #if LINSYS_SOLVE == 1
-                sqp_stats = sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, rho_reset);
+            sqp_stats = sqpSolvePcg<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, config, rho, rho_reset);
         #else 
-        	    sqp_stats = sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, rho_reset);
+    	    sqp_stats = sqpSolveQdldl<T>(state_size, control_size, knot_points, timestep, d_eePos_goal, d_lambda, d_xu, d_dynmem, rho, rho_reset);
         #endif
 
         cur_linsys_iters = std::get<0>(sqp_stats);
@@ -271,9 +271,9 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         cur_linsys_exits = std::get<5>(sqp_stats);
 
         #if CONST_UPDATE_FREQ
-                simulation_time = SIMULATION_PERIOD;
+            simulation_time = SIMULATION_PERIOD;
         #else
-                simulation_time = sqp_solve_time_us;
+            simulation_time = sqp_solve_time_us;
         #endif
         
         // simulate traj for current solve time, offset by previous solve time
@@ -301,7 +301,7 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
             traj_offset++;
 
             // shift xu
-            just_shift<T>(state_size, control_size, knot_points, d_xu);             // shift everything over one
+            just_shift<T>(state_size, control_size, knot_points, d_xu); // shift everything over one
             if (traj_offset + knot_points < traj_steps){
                 // if within precomputed traj, fill in last state, control with precompute
                 gpuErrchk(cudaMemcpy(&d_xu[traj_len - (state_size + control_size)], &d_xu_traj[(state_size+control_size)*traj_offset - control_size], sizeof(T)*(state_size+control_size), cudaMemcpyDeviceToDevice));     // last state filled from precomputed trajectory
@@ -325,6 +325,7 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
             }
             
             // shift lambda
+            printf("shifting lambda [%d/%d]\n",control_update_step,max_control_updates);
             just_shift(state_size, 0, knot_points, d_lambda);
                 // gpuErrchk(cudaMemset(&lambdas[i][state_size*(knot_points-1)], 0, state_size*sizeof(T)));
             

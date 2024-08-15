@@ -77,7 +77,7 @@ namespace gato_plant{
 
 	template <typename T>
 	__device__
-	void forwardDynamicsGradient( T *s_dqdd, T *s_q, T *s_qd, T *s_u, T *s_temp, void *d_dynMem_const, cooperative_groups::thread_block block){
+	void forwardDynamicsGradient( T *s_dqdd, T *s_q, T *s_qd, T *s_u, T *s_temp, void *d_dynMem_const){
 		if (threadIdx.x == 0){
 			s_dqdd[0] = GRAVITY*cos(s_q[0]); //dq
 			s_dqdd[1] = 0.0; //dqd
@@ -91,13 +91,14 @@ namespace gato_plant{
 
 	template <typename T>
 	__device__
-    void forwardDynamicsAndGradient(T *s_dqdd, T *s_qdd, T *s_q, T *s_qd, T *s_u,  T *s_temp, void *d_dynMem_const, cooperative_groups::thread_block block){
+    void forwardDynamicsAndGradient(T *s_dqdd, T *s_qdd, T *s_q, T *s_qd, T *s_u,  T *s_temp, void *d_dynMem_const){
         if (threadIdx.x == 0){
         	s_qdd[0] = s_u[0] + GRAVITY*sin(s_q[0]);
         	s_dqdd[0] = GRAVITY*cos(s_q[0]); //dq
 			s_dqdd[1] = 0.0; //dqd
 			s_dqdd[2] = 1;   //du
         }
+        __syncthreads();
     }
 
 
