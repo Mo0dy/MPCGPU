@@ -186,9 +186,9 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     gpuErrchk(cudaMalloc(&d_lambda, state_size*knot_points*sizeof(T)));
     gpuErrchk(cudaMalloc(&d_xu, traj_len*sizeof(T)));
     gpuErrchk(cudaMalloc(&d_xu_old, traj_len*sizeof(T)));
-    gpuErrchk(cudaMalloc(&d_eePos_goal, 2*knot_points*sizeof(T)));
+    gpuErrchk(cudaMalloc(&d_eePos_goal, grid::EE_POS_SIZE*knot_points*sizeof(T)));
     gpuErrchk(cudaMemset(d_lambda, 0, state_size*knot_points*sizeof(T)));
-    gpuErrchk(cudaMemcpy(d_eePos_goal, d_eePos_traj, 2*knot_points*sizeof(T), cudaMemcpyDeviceToDevice));
+    gpuErrchk(cudaMemcpy(d_eePos_goal, d_eePos_traj, grid::EE_POS_SIZE*knot_points*sizeof(T), cudaMemcpyDeviceToDevice));
     gpuErrchk(cudaMemcpy(d_xu_old, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
     gpuErrchk(cudaMemcpy(d_xu, d_xu_traj, traj_len*sizeof(T), cudaMemcpyDeviceToDevice));
 
@@ -201,13 +201,13 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     gpuErrchk(cudaMemcpy(h_xs, d_xs, state_size*sizeof(T), cudaMemcpyDeviceToHost));
     tracking_path.push_back(std::vector<T>(h_xs, &h_xs[state_size]));    
     gpuErrchk(cudaPeekAtLastError());
-    T h_eePos[2];
-    T h_eePos_goal[2];
+    T h_eePos[grid::EE_POS_SIZE];
+    T h_eePos_goal[grid::EE_POS_SIZE];
 
 
     // temp device memory
     T *d_eePos;
-    gpuErrchk(cudaMalloc(&d_eePos, 2*sizeof(T)));
+    gpuErrchk(cudaMalloc(&d_eePos, grid::EE_POS_SIZE*sizeof(T)));
 
     #if LINSYS_SOLVE == 1
         pcg_config<T> config;
@@ -251,8 +251,8 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
 
         #if LIVE_PRINT_PATH
             grid::end_effector_positions_kernel<T><<<1,128,144*sizeof(T)>>>(d_eePos, d_xs, grid::NUM_JOINTS, (grid::robotModel<T> *) d_dynmem, 1);
-            gpuErrchk(cudaMemcpy(h_eePos, d_eePos, 2*sizeof(T), cudaMemcpyDeviceToHost));
-            for (uint32_t i = 0; i < 2; i++){
+            gpuErrchk(cudaMemcpy(h_eePos, d_eePos, grid::EE_POS_SIZE*sizeof(T), cudaMemcpyDeviceToHost));
+            for (uint32_t i = 0; i < grid::EE_POS_SIZE; i++){
                 std::cout << h_eePos[i] << (i < 5 ? " " : "\n");
             }
         #endif // #if LIVE_PRINT_PATH
@@ -289,14 +289,14 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
             
             // record tracking error
             grid::end_effector_positions_kernel<T><<<1,128,144*sizeof(T)>>>(d_eePos, d_xs, grid::NUM_JOINTS, (grid::robotModel<T> *) d_dynmem, 1);
-            gpuErrchk(cudaMemcpy(h_eePos, d_eePos, 2*sizeof(T), cudaMemcpyDeviceToHost));
-            gpuErrchk(cudaMemcpy(h_eePos_goal, d_eePos_goal, 2*sizeof(T), cudaMemcpyDeviceToHost));
+            gpuErrchk(cudaMemcpy(h_eePos, d_eePos, grid::EE_POS_SIZE*sizeof(T), cudaMemcpyDeviceToHost));
+            gpuErrchk(cudaMemcpy(h_eePos_goal, d_eePos_goal, grid::EE_POS_SIZE*sizeof(T), cudaMemcpyDeviceToHost));
             cur_tracking_error = 0.0;
-            for(uint32_t i=0; i < 2; i++){
+            for(uint32_t i=0; i < grid::EE_POS_SIZE_COST; i++){
                 cur_tracking_error += abs(h_eePos[i] - h_eePos_goal[i]);
             }
             // std::cout << cur_tracking_error << std::endl;;
-            tracking_errors.push_back(cur_tracking_error);                                            
+            tracking_errors.push_back(cur_tracking_error);                         
             
             traj_offset++;
 
@@ -314,18 +314,17 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
             }
             
             // shift goal
-            just_shift(2, 0, knot_points, d_eePos_goal);
+            just_shift(grid::EE_POS_SIZE, 0, knot_points, d_eePos_goal);
             if (traj_offset + knot_points < traj_steps){
-                gpuErrchk(cudaMemcpy(&d_eePos_goal[(knot_points-1)*(2)], &d_eePos_traj[(traj_offset+knot_points-1) * (2)], 2*sizeof(T), cudaMemcpyDeviceToDevice));
+                gpuErrchk(cudaMemcpy(&d_eePos_goal[(knot_points-1)*(grid::EE_POS_SIZE)], &d_eePos_traj[(traj_offset+knot_points-1) * (grid::EE_POS_SIZE)], grid::EE_POS_SIZE*sizeof(T), cudaMemcpyDeviceToDevice));
             }
             else{
                 // fill in last goal state with goal state and zero velocity
-                gpuErrchk(cudaMemcpy(&d_eePos_goal[(knot_points-1)*(2)], &d_eePos_traj[(traj_steps-1)*(2)], (2)*sizeof(T), cudaMemcpyDeviceToDevice));
-                // gpuErrchk(cudaMemset(&d_eePos_goal[(knot_points-1)*(2) + state_size / 2], 0, (state_size/2) * sizeof(T)));
+                gpuErrchk(cudaMemcpy(&d_eePos_goal[(knot_points-1)*(grid::EE_POS_SIZE)], &d_eePos_traj[(traj_steps-1)*(grid::EE_POS_SIZE)], (grid::EE_POS_SIZE)*sizeof(T), cudaMemcpyDeviceToDevice));
+                // gpuErrchk(cudaMemset(&d_eePos_goal[(knot_points-1)*(grid::EE_POS_SIZE) + state_size / 2], 0, (state_size/2) * sizeof(T)));
             }
             
             // shift lambda
-            printf("shifting lambda [%d/%d]\n",control_update_step,max_control_updates);
             just_shift(state_size, 0, knot_points, d_lambda);
                 // gpuErrchk(cudaMemset(&lambdas[i][state_size*(knot_points-1)], 0, state_size*sizeof(T)));
             
@@ -386,10 +385,10 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     #endif
     
     grid::end_effector_positions_kernel<T><<<1,128,144*sizeof(T)>>>(d_eePos, d_xs, grid::NUM_JOINTS, (grid::robotModel<T> *) d_dynmem, 1);
-    gpuErrchk(cudaMemcpy(h_eePos, d_eePos, 2*sizeof(T), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_eePos_goal, d_eePos_goal, 2*sizeof(T), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(h_eePos, d_eePos, grid::EE_POS_SIZE*sizeof(T), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(h_eePos_goal, d_eePos_goal, grid::EE_POS_SIZE*sizeof(T), cudaMemcpyDeviceToHost));
     cur_tracking_error = 0.0;
-    for(uint32_t i=0; i < 2; i++){
+    for(uint32_t i=0; i < grid::EE_POS_SIZE_COST; i++){
         cur_tracking_error += abs(h_eePos[i] - h_eePos_goal[i]);
     }
 

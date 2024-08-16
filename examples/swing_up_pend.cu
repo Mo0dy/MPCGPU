@@ -16,7 +16,7 @@ int main(){
     constexpr uint32_t state_size = 2;
     constexpr uint32_t control_size = 1;
     constexpr uint32_t knot_points = KNOT_POINTS;
-    const linsys_t timestep = .015625;
+    const linsys_t timestep = 0.1;
     const uint32_t total_trajsteps = 1000;
 
     const uint32_t traj_test_iters = TEST_ITERS;

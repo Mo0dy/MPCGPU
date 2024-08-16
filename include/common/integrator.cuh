@@ -259,7 +259,6 @@ void just_shift(uint32_t size_1, uint32_t size_2, uint32_t vec_length, T *d_inpu
     uint32_t total_size = size_1 + size_2; // default of state_size + control_size to shift xu trajectories
     for (uint32_t index = 0; index < vec_length-1; index++){
         uint32_t stepsize = (size_1+(index<vec_length-2)*size_2); // for xu traj where last state is just state
-        printf("index[%d/%d] with stepsize[%d]\n",index,vec_length-1,stepsize);
         gpuErrchk(cudaMemcpy(&d_input_vec[index*total_size], &d_input_vec[(index+1)*total_size], stepsize*sizeof(T), cudaMemcpyDeviceToDevice));
     }
 }

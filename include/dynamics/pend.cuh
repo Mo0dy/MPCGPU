@@ -3,7 +3,7 @@
 #define STATE_SIZE 2
 #define Q_COST 10.0
 #define QD_COST 1.0
-#define R_COST 0.
+#define R_COST 0.1
 #define PI 3.14159
 #define GRAVITY -9.81
 
