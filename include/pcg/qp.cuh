@@ -101,7 +101,7 @@ auto qpSolvePcg(const uint32_t state_size, const uint32_t control_size, const ui
     struct timespec linsys_start, linsys_end;
     double linsys_time;
 
-    // form the Schur complement system (S, Pinv, gamma) from
+    // form the Schur complement system (S, Pinv, H, gamma) from
     // the given KKT matrix (G_dense, C_dense, g, c)
     form_schur_system_all<T>(state_size, control_size, knot_points,
                              d_G_dense, d_C_dense, d_g, d_c,

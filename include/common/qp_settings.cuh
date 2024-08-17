@@ -33,8 +33,5 @@
 #define DZ_THREADS          64
 #endif
 
-#ifndef KKT_THREADS
-#define KKT_THREADS         64
-#endif
 
 #include "common/dz.cuh"
