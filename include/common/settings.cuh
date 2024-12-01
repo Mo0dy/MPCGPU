@@ -68,7 +68,7 @@ typedef float linsys_t;
 #endif
 
 #ifndef SIMULATION_PERIOD
-#define SIMULATION_PERIOD 4000
+#define SIMULATION_PERIOD 2000
 #endif
 
 #ifndef MERIT_THREADS
