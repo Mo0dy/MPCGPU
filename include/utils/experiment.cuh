@@ -104,58 +104,41 @@ std::string getStatsString(const std::string& statsString) {
 }
 
 template<typename T>
-std::string printStats(std::vector<T>* data, std::string prefix = "data") {
-    T sum = std::accumulate(data->begin(), data->end(), static_cast<T>(0));
-    float mean = sum / static_cast<double>(data->size());
+std::string printStats(std::vector<T> *data, std::string prefix = "data"){
+   T sum = std::accumulate(data->begin(), data->end(), static_cast<T>(0));
+   float mean = sum/static_cast<double>(data->size());
+   std::vector<T> diff(data->size());
+   std::transform(data->begin(), data->end(), diff.begin(), [mean](T x) {return x - mean;});
+   T sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
+   T stdev = std::sqrt(sq_sum / data->size());
+   typename std::vector<T>::iterator minInd = std::min_element(data->begin(), data->end());
+   typename std::vector<T>::iterator maxInd = std::max_element(data->begin(), data->end());
+   T min = data->at(std::distance(data->begin(), minInd)); 
+   T max = data->at(std::distance(data->begin(), maxInd));
 
-    std::vector<T> diff(data->size());
-    std::transform(data->begin(), data->end(), diff.begin(), [mean](T x) { return x - mean; });
+   // Now also want to sort and get median, first and third quartile for variance plot
+   std::vector<T> sortedData(*data);
+   std::sort(sortedData.begin(), sortedData.end());
 
-    double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
-    double stdev = std::sqrt(sq_sum / data->size());
+   std::cout << std::endl;
+   T median, Q1, Q3;
+   size_t n = sortedData.size();
+   if (n % 2 == 0) {
+      median = (sortedData[n/2 - 1] + sortedData[n/2]) / 2.0;
+      Q1 = (sortedData[n/4 - 1] + sortedData[n/4]) / 2.0;
+      Q3 = (sortedData[3*n/4 - 1] + sortedData[3*n/4]) / 2.0;
+   } else {
+      median = sortedData[n/2];
+      Q1 = sortedData[n/4];
+      Q3 = sortedData[3*n/4];
+   }
+   std::cout << "Average[" << mean << "] Std Dev [" << stdev << "] Min [" << min << "] Max [" << max << "] Median [" << median << "] Q1 [" << Q1 << "] Q3 [" << Q3 << "]" << std::endl;
 
-    auto minIt = std::min_element(data->begin(), data->end());
-    auto maxIt = std::max_element(data->begin(), data->end());
-    T min = *minIt;
-    T max = *maxIt;
-
-    std::vector<T> sortedData(*data);
-    std::sort(sortedData.begin(), sortedData.end());
-
-    T median, Q1, Q3;
-    size_t n = sortedData.size();
-    if (n % 2 == 0) {
-        median = (sortedData[n / 2 - 1] + sortedData[n / 2]) / 2.0;
-        Q1 = (sortedData[n / 4 - 1] + sortedData[n / 4]) / 2.0;
-        Q3 = (sortedData[3 * n / 4 - 1] + sortedData[3 * n / 4]) / 2.0;
-    } else {
-        median = sortedData[n / 2];
-        Q1 = sortedData[n / 4];
-        Q3 = sortedData[3 * n / 4];
-    }
-
-    // Construct JSON
-    std::ostringstream ss;
-    ss << "{\n";
-    ss << "  \"prefix\": \"" << prefix << "\",\n";
-    ss << "  \"statistics\": {\n";
-    ss << "    \"mean\": " << mean << ",\n";
-    ss << "    \"stdev\": " << stdev << ",\n";
-    ss << "    \"min\": " << min << ",\n";
-    ss << "    \"max\": " << max << ",\n";
-    ss << "    \"median\": " << median << ",\n";
-    ss << "    \"Q1\": " << Q1 << ",\n";
-    ss << "    \"Q3\": " << Q3 << "\n";
-    ss << "  },\n";
-    ss << "  \"raw_data\": [";
-    for (size_t i = 0; i < data->size(); ++i) {
-        ss << (*data)[i];
-        if (i != data->size() - 1) ss << ", ";
-    }
-    ss << "]\n";
-    ss << "}";
-
-    return ss.str();
+   // Construct the formatted string
+   std::stringstream ss;
+   ss << "Average[" << mean << "] Std Dev [" << stdev << "] Min [" << min << "] Max [" << max << "] Median [" << median << "] Q1 [" << Q1 << "] Q3 [" << Q3 << "]";
+   
+   return ss.str();
 }
 
 template <typename T>
