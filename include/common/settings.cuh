@@ -35,7 +35,7 @@
 #endif
 
 #ifndef SAVE_DATA
-#define SAVE_DATA   0
+#define SAVE_DATA   1
 #endif 
 
 #ifndef USE_DOUBLES
