@@ -248,24 +248,31 @@ def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: st
         plt.close(fig)
 
 
-def plot_histograms(results: list[Result], show=False, close=True):
+def plot_histograms(results: list[Result], title, scale_to_q1_q3=False, show=False, close=True):
     # plots a series of histograms into a single figure. One for every result
     # align all x axes
-    min_time = min(r.sqp_times.min() for r in results)
-    max_time = max(r.sqp_times.max() for r in results)
 
-    diff = max_time - min_time
-    min_time = max(0, min_time - diff * 0.1)
-    max_time = max_time + diff * 0.1
+    if scale_to_q1_q3:
+        min_time = min(np.percentile(r.sqp_times, 25) for r in results)
+        max_time = max(np.percentile(r.sqp_times, 75) for r in results)
+        diff = max_time - min_time
+        min_time = max(0, min_time - diff * 0.4)
+        max_time = max_time + diff * 0.4
+    else:
+        min_time = min(r.sqp_times.min() for r in results)
+        max_time = max(r.sqp_times.max() for r in results)
+        diff = max_time - min_time
+        min_time = max(0, min_time - diff * 0.1)
+        max_time = max_time + diff * 0.1
+
 
 
     def plot_histogram(ax, result: Result):
-        ax.hist(result.sqp_times, bins=50)
+        ax.hist(result.sqp_times, bins='auto')
         ax.set_title(f"{result.alg} with {result.knot_points} knot points and eps {result.eps}")
         ax.set_xlabel("Time (us)")
         ax.set_ylabel("Frequency")
         ax.grid()
-        ax.set_xlim(min_time, max_time)
         # draw line at mean, q1, q3
         mean = np.mean(result.sqp_times)
         q1 = np.percentile(result.sqp_times, 25)
@@ -277,6 +284,9 @@ def plot_histograms(results: list[Result], show=False, close=True):
         # mark min and max value of this plot
         ax.axvline(result.sqp_times.min(), color='green', linestyle='--', label='Min')
         ax.axvline(result.sqp_times.max(), color='red', linestyle='--', label='Max')
+
+        ax.set_xlim(min_time, max_time)
+
         ax.legend()
 
     fig, axs = plt.subplots(len(results), figsize=(12, 8))
@@ -287,7 +297,7 @@ def plot_histograms(results: list[Result], show=False, close=True):
     plt.subplots_adjust(top=0.85)
     if show:
         plt.show()
-    plt.savefig(f"histograms.png")
+    plt.savefig(f"{title}.png")
     if close:
         plt.close(fig)
 
@@ -298,6 +308,14 @@ def analyze(result_dir: str, exit_tol: float):
     plot_histograms(
         [data.get_result('QDLDL', 16),
          data.get_result('PCG', 16, exit_tol)],
+        title=os.path.basename(result_dir) + '_histograms',
+        close=False
+    )
+    plot_histograms(
+        [data.get_result('QDLDL', 16),
+         data.get_result('PCG', 16, exit_tol)],
+        title=os.path.basename(result_dir) + '_histograms_scaled',
+        scale_to_q1_q3=True,
         show=True
     )
 
