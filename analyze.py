@@ -176,63 +176,6 @@ def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: st
     plt.savefig(f"mean_and_variance_eps-{base_eps}.png")
 
 
-    # ===============================================
-    # For all EPS and QDLDL
-    # ===============================================
-
-    # fig, axs = plt.subplots(2, figsize=(12, 8))
-    # fig.suptitle(f"Results for {result_dir} with exit tol {exit_tol}")
-    # mean_ax = axs[0]
-    # var_ax = axs[1]
-    # mean_ax.set_title("Mean and Worst Case")
-    # mean_ax.set_xlabel("Knot Points")
-    # mean_ax.set_ylabel("Time (us)")
-    # var_ax.set_title("Variance")
-    # var_ax.set_xlabel("Knot Points")
-
-    # # if the alg is PCG then plot the results for every eps
-
-    # for alg, eps in [('QDLDL', None)] + [('PCG', eps) for eps in epsilons if eps > 0]:
-    #     if alg == 'PCG':
-    #         results = {res.knot_points: res for res in results_list if res.alg == alg and res.eps == eps}
-    #     elif alg == 'QDLDL':
-    #         results = {res.knot_points: res for res in results_list if res.alg == alg}
-    #     else:
-    #         assert False, f"Unexpected algorithm: {alg}"
-
-    #     means = []
-    #     std_means = []
-    #     stds = []
-    #     variances = []
-    #     worst_case = []
-
-    #     for k in xs:
-    #         assert k in results, f"Missing result for {alg} with {k} knot points"
-    #         res = results[k]
-    #         sqp_times = res.sqp_times
-    #         means.append(np.mean(sqp_times))
-    #         std_means.append(np.std(sqp_times) / np.sqrt(len(sqp_times)))
-    #         stds.append(np.std(sqp_times))
-    #         variances.append(np.var(sqp_times))
-    #         worst_case.append(np.max(sqp_times))
-
-    #     if alg == "QDLDL":
-    #         mean_ax.errorbar(xs, means, label=f"{alg} eps {eps}", yerr=stds, fmt='--o', capsize=7, markersize=10)
-    #     else:
-    #         mean_ax.errorbar(xs, means, label=f"{alg} eps {eps}", yerr=stds, fmt='-o', capsize=5)
-    #     mean_ax.scatter(xs, worst_case, marker='x', label=f"{alg} eps {eps} worst case")
-
-    #     var_ax.plot(xs, variances, label=f"{alg} eps {eps}")
-
-    # mean_ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    # var_ax.legend()
-    # # plt.tight_layout()
-
-    # plt.subplots_adjust(top=0.85)
-    # plt.show()
-    # plt.savefig(os.path.join(result_dir, "results_eps.png"))
-
-
     fig, axs = plt.subplots(2, figsize=(12, 8))
     fig.suptitle(f"Results for {title}.")
     mean_ax = axs[0]
