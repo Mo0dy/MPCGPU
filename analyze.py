@@ -250,12 +250,35 @@ def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: st
 
 def plot_histograms(results: list[Result], show=False, close=True):
     # plots a series of histograms into a single figure. One for every result
+    # align all x axes
+    min_time = min(r.sqp_times.min() for r in results)
+    max_time = max(r.sqp_times.max() for r in results)
+
+    diff = max_time - min_time
+    min_time = max(0, min_time - diff * 0.1)
+    max_time = max_time + diff * 0.1
+
+
     def plot_histogram(ax, result: Result):
         ax.hist(result.sqp_times, bins=50)
         ax.set_title(f"{result.alg} with {result.knot_points} knot points and eps {result.eps}")
         ax.set_xlabel("Time (us)")
         ax.set_ylabel("Frequency")
         ax.grid()
+        ax.set_xlim(min_time, max_time)
+        # draw line at mean, q1, q3
+        mean = np.mean(result.sqp_times)
+        q1 = np.percentile(result.sqp_times, 25)
+        q3 = np.percentile(result.sqp_times, 75)
+        ax.axvline(mean, color='gray', linestyle='--', label='Mean')
+        ax.axvline(q1, color='blue', linestyle='--', label='Q1, Q3')
+        ax.axvline(q3, color='blue', linestyle='--')
+
+        # mark min and max value of this plot
+        ax.axvline(result.sqp_times.min(), color='green', linestyle='--', label='Min')
+        ax.axvline(result.sqp_times.max(), color='red', linestyle='--', label='Max')
+        ax.legend()
+
     fig, axs = plt.subplots(len(results), figsize=(12, 8))
     fig.suptitle(f"Histograms for specific knot_points and algorithms.")
     for ax, result in zip(axs, results):
