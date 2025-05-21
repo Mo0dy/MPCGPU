@@ -60,6 +60,16 @@ class Dataset:
         r0 = self.results[0]
         return all(r.alg == r0.alg and r.eps == r0.eps for r in self.results)
 
+    def get_result(self, alg: str, knot_points: int, eps: float | None=None) -> Result:
+        """Get the result for a specific algorithm and knot points."""
+        res = None
+        for r in self.results:
+            if r.alg == alg and r.knot_points == knot_points and (eps is None or r.eps == eps):
+                assert res is None, f"Multiple results found for {alg} with {knot_points} knot points and eps {eps}"
+                res = r
+        assert res is not None, f"Result not found for {alg} with {knot_points} knot points and eps {eps}"
+        return res
+
 class OneDataset(Dataset):
     def __init__(self, results: list[Result]):
         super().__init__(results)
@@ -110,7 +120,7 @@ def load_data(result_dir) -> Dataset:
     return Dataset(results)
 
 
-def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: str):
+def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: str, show=False, close=True):
     if base_eps not in data.epsilons:
         raise ValueError(f"Base epsilon {base_eps} not found in data")
 
@@ -172,8 +182,11 @@ def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: st
     var_ax.legend()
     plt.tight_layout()
     plt.subplots_adjust(top=0.85)
-    plt.show()
+    if show:
+        plt.show()
     plt.savefig(f"mean_and_variance_eps-{base_eps}.png")
+    if close:
+        plt.close(fig)
 
 
     fig, axs = plt.subplots(2, figsize=(12, 8))
@@ -228,13 +241,42 @@ def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: st
     var_ax.legend()
     plt.tight_layout()
     plt.subplots_adjust(top=0.85)
-    plt.show()
+    if show:
+        plt.show()
     plt.savefig(f"mean_and_variance_eps-{base_eps}.png")
+    if close:
+        plt.close(fig)
+
+
+def plot_histograms(results: list[Result], show=False, close=True):
+    # plots a series of histograms into a single figure. One for every result
+    def plot_histogram(ax, result: Result):
+        ax.hist(result.sqp_times, bins=50)
+        ax.set_title(f"{result.alg} with {result.knot_points} knot points and eps {result.eps}")
+        ax.set_xlabel("Time (us)")
+        ax.set_ylabel("Frequency")
+        ax.grid()
+    fig, axs = plt.subplots(len(results), figsize=(12, 8))
+    fig.suptitle(f"Histograms for specific knot_points and algorithms.")
+    for ax, result in zip(axs, results):
+        plot_histogram(ax, result)
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.85)
+    if show:
+        plt.show()
+    plt.savefig(f"histograms.png")
+    if close:
+        plt.close(fig)
 
 
 def analyze(result_dir: str, exit_tol: float):
     data = load_data(result_dir)
-    plot_mean_and_var_over_knot_points(data, exit_tol, os.path.basename(result_dir))
+    plot_mean_and_var_over_knot_points(data, exit_tol, os.path.basename(result_dir), close=False)
+    plot_histograms(
+        [data.get_result('QDLDL', 16),
+         data.get_result('PCG', 16, exit_tol)],
+        show=True
+    )
 
 
 def main():
