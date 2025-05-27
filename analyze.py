@@ -9,6 +9,9 @@ import re
 from dataclasses import dataclass
 from typing import Callable
 from itertools import *
+import sys
+
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 
@@ -17,6 +20,15 @@ algs = ['PCG', 'QDLDL']
 colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'gray']
 colors = cycle(colors)
 
+class NoDataException(Exception):
+    pass
+
+@dataclass
+class Settings:
+    result_dir: Path
+    plot_dir: Path
+    base_eps: float
+
 @dataclass
 class Result:
     alg: str
@@ -24,7 +36,6 @@ class Result:
     eps: float | None
     sqp_times: np.ndarray
     linsys_times: np.ndarray | None
-
 
 @dataclass(frozen=True)
 class Dataset:
@@ -42,13 +53,20 @@ class Dataset:
     def filter_by_alg(self, alg: str) -> Dataset:
         return self.filter_by(lambda r: r.alg == alg)
 
-    def filter_by_eps(self, eps: float | None) -> Dataset:
-        return self.filter_by(lambda r: r.eps == eps)
+    def filter_by_eps(self, eps: float | None, relative_tol=1e-4) -> Dataset:
+        if eps is None:
+            return self.filter_by(lambda r: r.eps is None)
+        return self.filter_by(lambda r: (abs(r.eps - eps) / eps) < relative_tol if r.eps is not None else False)
+
+    def filter_by_knot_points(self, knot_points: int) -> Dataset:
+        return self.filter_by(lambda r: r.knot_points == knot_points)
 
     def filter_by(self, f: Callable[[Result], bool]) -> Dataset | OneDataset:
         dataset = Dataset(
             results=[r for r in self.results if f(r)]
         )
+        if len(dataset.results) == 0:
+            return Dataset([])
         if dataset.is_one_run():
             return OneDataset(sorted(dataset.results, key=lambda r: r.knot_points))
         return dataset
@@ -65,12 +83,14 @@ class Dataset:
         res = None
         for r in self.results:
             if r.alg == alg and r.knot_points == knot_points and (eps is None or r.eps == eps):
-                assert res is None, f"Multiple results found for {alg} with {knot_points} knot points and eps {eps}"
+                raise NoDataException(f"Multiple results found for {alg} with {knot_points} knot points and eps {eps}")
                 res = r
-        assert res is not None, f"Result not found for {alg} with {knot_points} knot points and eps {eps}"
+        raise NoDataException(f"Result not found for {alg} with {knot_points} knot points and eps {eps}")
         return res
 
+
 class OneDataset(Dataset):
+    # TODO generalize to may vary at most in one dimension
     def __init__(self, results: list[Result]):
         super().__init__(results)
         assert self.is_one_run(), "OneDataset must contain results of only one run"
@@ -79,7 +99,53 @@ class OneDataset(Dataset):
     def __getitem__(self, item):
         return self.by_knot_points[item]
 
-def load_data(result_dir) -> Dataset:
+
+def make_title(
+        title: str,
+        alg: str | None = None,
+        knot_points: int | None = None,
+        eps: float | None = None,
+        result_type: str = 'sqp_times',
+) -> str:
+    return "_".join(
+        filter(None, [
+            title,
+            alg if alg else None,
+            f"n={knot_points}" if knot_points is not None else None,
+            f"eps={eps}" if eps is not None else None,
+            result_type
+        ])
+        )
+
+
+def make_title_from_data(
+        title: str,
+        data: Dataset | list[Result]
+):
+    if isinstance(data, list):
+        data = Dataset(data)
+    if len(epsilons := data.epsilons) == 1:
+        eps = next(iter(epsilons))
+    else:
+        eps = None
+    if len(knot_points := data.knot_points) == 1:
+        knot_points = next(iter(knot_points))
+    else:
+        knot_points = None
+    if len(algorithms := set(r.alg for r in data.results)) == 1:
+        alg = next(iter(algorithms))
+    else:
+        alg = None
+    return make_title(
+        title=title,
+        alg=alg,
+        knot_points=knot_points,
+        eps=eps
+    )
+
+
+
+def load_data(result_dir: Path) -> Dataset:
     results = []
     pattern = re.compile(r'(\d+)_([A-Z]+)(?:_(\d\.\d+))?_0_sqp_times\.result')
 
@@ -119,77 +185,15 @@ def load_data(result_dir) -> Dataset:
 
     return Dataset(results)
 
-
-def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: str, show=False, close=True):
-    if base_eps not in data.epsilons:
-        raise ValueError(f"Base epsilon {base_eps} not found in data")
-
-    # ===============================================
-    # Basic Comparison
-    # ===============================================
-
-    # plot the algs against each other over the knot points for PCG use eps = 1e-4
-    # plot mean with std of mean. Add a red cross for worst case time. In a subplot below plot standard deviation
-
-    # setup the figure
-
-    # top plot is mean with std of mean and worst case
-    # bottom plot is variance
+def plot_mean_and_var_over_knot_points(data: Dataset, epsilons: list[float] | float, settings: Settings, show=False, close=True):
     fig, axs = plt.subplots(2, figsize=(12, 8))
-    fig.suptitle(f"Results for {title} with exit tol {base_eps}")
-
-    mean_ax = axs[0]
-    var_ax = axs[1]
-
-    mean_ax.set_title("Mean and Worst Case")
-    mean_ax.set_xlabel("Knot Points")
-    mean_ax.set_ylabel("Time (us)")
-
-    var_ax.set_title("Variance")
-    var_ax.set_xlabel("Knot Points")
-
-    for (alg, eps), c in zip(
-            [('QDLDL', None), ('PCG', base_eps)],
-            colors
-    ):
-        results = data.filter_by_alg(alg).filter_by_eps(eps)
-        assert isinstance(results, OneDataset), f"Expected OneDataset but got {type(results)}"
-
-        xs = results.knot_points
-
-        means = []
-        std_means = []
-        stds = []
-        variances = []
-        worst_case = []
-
-        for k in xs:
-            res = results[k]
-            sqp_times = res.sqp_times
-            means.append(np.mean(sqp_times))
-            std_means.append(np.std(sqp_times) / np.sqrt(len(sqp_times)))
-            stds.append(np.std(sqp_times))
-            variances.append(np.var(sqp_times))
-            worst_case.append(np.max(sqp_times))
-
-        # error bar with I shaped errors
-        mean_ax.errorbar(xs, means, color=c, yerr=stds, label=alg, fmt='-o', capsize=5)
-        mean_ax.scatter(xs, worst_case, color=c, marker='x', label=f"{alg} worst case")
-
-        var_ax.plot(xs, variances, label=alg, color=c)
-
-    mean_ax.legend()
-    var_ax.legend()
-    plt.tight_layout()
-    plt.subplots_adjust(top=0.85)
-    if show:
-        plt.show()
-    plt.savefig(f"mean_and_variance_eps-{base_eps}.png")
-    if close:
-        plt.close(fig)
-
-
-    fig, axs = plt.subplots(2, figsize=(12, 8))
+    if isinstance(epsilons, list) and len(epsilons) == 1:
+        title = make_title("mean_and_variance", eps=epsilons[0])
+    if isinstance(epsilons, list):
+        title = make_title("mean_and_variance")
+    else:
+        title = make_title("mean_and_variance", eps=epsilons)
+        epsilons = [epsilons]
     fig.suptitle(f"Results for {title}.")
     mean_ax = axs[0]
     var_ax = axs[1]
@@ -201,7 +205,7 @@ def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: st
     var_ax.set_xlabel("Knot Points")
 
     for (alg, eps), c in zip(
-            [('QDLDL', None)] + [('PCG', eps) for eps in data.epsilons if eps > 0],
+            [('QDLDL', None)] + [('PCG', eps) for eps in epsilons if eps > 0],
             colors
     ):
         results = data.filter_by_alg(alg).filter_by_eps(eps)
@@ -241,14 +245,24 @@ def plot_mean_and_var_over_knot_points(data: Dataset, base_eps: float, title: st
     var_ax.legend()
     plt.tight_layout()
     plt.subplots_adjust(top=0.85)
+    plt.savefig(settings.plot_dir / f"{title}.png")
     if show:
         plt.show()
-    plt.savefig(f"mean_and_variance_eps-{base_eps}.png")
     if close:
         plt.close(fig)
 
 
-def plot_histograms(results: list[Result], title, scale_to_q1_q3=False, show=False, close=True):
+def plot_histograms_from_data(
+        results: list[Result],
+        title: str,
+        settings: Settings,
+        get_data: Callable[[Result], np.ndarray] = lambda r: r.sqp_times,
+        scale_to_q1_q3=False,
+        show=False,
+        close=True
+):
+    title = make_title_from_data(title, results)
+
     # plots a series of histograms into a single figure. One for every result
     # align all x axes
 
@@ -259,8 +273,8 @@ def plot_histograms(results: list[Result], title, scale_to_q1_q3=False, show=Fal
         min_time = max(0, min_time - diff * 0.4)
         max_time = max_time + diff * 0.4
     else:
-        min_time = min(r.sqp_times.min() for r in results)
-        max_time = max(r.sqp_times.max() for r in results)
+        min_time = min(get_data(r).min() for r in results)
+        max_time = max(get_data(r).max() for r in results)
         diff = max_time - min_time
         min_time = max(0, min_time - diff * 0.1)
         max_time = max_time + diff * 0.1
@@ -268,67 +282,92 @@ def plot_histograms(results: list[Result], title, scale_to_q1_q3=False, show=Fal
 
 
     def plot_histogram(ax, result: Result):
-        ax.hist(result.sqp_times, bins='auto')
+        ax.hist(get_data(result), bins='auto')
         ax.set_title(f"{result.alg} with {result.knot_points} knot points and eps {result.eps}")
         ax.set_xlabel("Time (us)")
         ax.set_ylabel("Frequency")
         ax.grid()
         # draw line at mean, q1, q3
-        mean = np.mean(result.sqp_times)
-        q1 = np.percentile(result.sqp_times, 25)
-        q3 = np.percentile(result.sqp_times, 75)
+        mean = np.mean(get_data(result))
+        q1 = np.percentile(get_data(result), 25)
+        q3 = np.percentile(get_data(result), 75)
         ax.axvline(mean, color='gray', linestyle='--', label='Mean')
         ax.axvline(q1, color='blue', linestyle='--', label='Q1, Q3')
         ax.axvline(q3, color='blue', linestyle='--')
 
         # mark min and max value of this plot
-        ax.axvline(result.sqp_times.min(), color='green', linestyle='--', label='Min')
-        ax.axvline(result.sqp_times.max(), color='red', linestyle='--', label='Max')
+        ax.axvline(get_data(result).min(), color='green', linestyle='--', label='Min')
+        ax.axvline(get_data(result).max(), color='red', linestyle='--', label='Max')
 
         ax.set_xlim(min_time, max_time)
 
         ax.legend()
 
     fig, axs = plt.subplots(len(results), figsize=(12, 8))
-    fig.suptitle(f"Histograms for specific knot_points and algorithms.")
+    fig.suptitle(f"Results for {title}.")
     for ax, result in zip(axs, results):
         plot_histogram(ax, result)
     plt.tight_layout()
     plt.subplots_adjust(top=0.85)
+    plt.savefig(settings.plot_dir / f"{title}.png")
     if show:
         plt.show()
-    plt.savefig(f"{title}.png")
     if close:
         plt.close(fig)
 
 
-def analyze(result_dir: str, exit_tol: float):
-    data = load_data(result_dir)
-    plot_mean_and_var_over_knot_points(data, exit_tol, os.path.basename(result_dir), close=False)
-    plot_histograms(
-        [data.get_result('QDLDL', 16),
-         data.get_result('PCG', 16, exit_tol)],
-        title=os.path.basename(result_dir) + '_histograms',
-        close=False
-    )
-    plot_histograms(
-        [data.get_result('QDLDL', 16),
-         data.get_result('PCG', 16, exit_tol)],
-        title=os.path.basename(result_dir) + '_histograms_scaled',
-        scale_to_q1_q3=True,
-        show=True
-    )
+def analyze(settings: Settings):
+    data = load_data(settings.result_dir)
+    plot_mean_and_var_over_knot_points(data, settings.base_eps, settings, close=False)
+    plot_mean_and_var_over_knot_points(data, data.epsilons, settings, close=False)
+    for n in [16, 128, 512]:
+        qdldl_result = data.filter_by_alg("QDLDL").filter_by_knot_points(n)
+        assert qdldl_result.is_one_run(), "QDLDL result should be a single run"
+        for eps in data.epsilons:
+            pcg_result = data.filter_by_alg("PCG").filter_by_knot_points(n).filter_by_eps(eps)
+            if len(pcg_result.results) == 0:
+                print(f"No data for eps {eps} and {n} knot points", file=sys.stderr)
+                continue
+            assert pcg_result.is_one_run(), "PCG result should be a single run"
+            plot_histograms_from_data(
+                [qdldl_result.results[0], pcg_result.results[0]],
+                "histogram",
+                settings,
+                close=False
+            )
+            plot_histograms_from_data(
+                [qdldl_result.results[0], pcg_result.results[0]],
+                "histogram_scaled",
+                settings,
+                scale_to_q1_q3=True,
+                close=False
+            )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Analyzes experiment results from MPCGPU")
     parser.add_argument("result_dir", help="Directory containing experiment results")
     parser.add_argument("--exit-tol", help="Tolerance for exit condition", type=str, default="1e-4")
+    parser.add_argument("-c", "--clean", action="store_true", default=False,
+                        help="Clean the plot directory before running the analysis")
 
     args = parser.parse_args()
     result_dir = args.result_dir
+    plot_dir = Path(str(result_dir) + "_plots")
+    if args.clean and plot_dir.exists():
+        print(f"Cleaning plot directory: {plot_dir}")
+        for file in plot_dir.glob("*"):
+            file.unlink()
+        plot_dir.rmdir()
+    plot_dir.mkdir(parents=True, exist_ok=True)
     exit_tol = float(args.exit_tol)
-    analyze(result_dir, exit_tol)
+    analyze(
+        Settings(
+            result_dir=Path(result_dir),
+            plot_dir=plot_dir,
+            base_eps=exit_tol
+        )
+    )
 
 if __name__ == "__main__":
     main()
