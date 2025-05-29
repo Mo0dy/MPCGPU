@@ -18,9 +18,10 @@ export LD_LIBRARY_PATH=$HOME/Programs/MPCGPU/qdldl/build/out:$LD_LIBRARY_PATH
 # Navigate to the directory containing your executables
 cd $HOME/Programs/MPCGPU
 
-# Clean results folder
-rm -rf ./tmp/results/*
-mkdir -p ./tmp/results
+if [ -d "./results" ]; then
+	rm -rf ./results
+fi
+mkdir -p ./results
 
 # Execute your program
 python runner.py
@@ -29,7 +30,7 @@ python runner.py
 
 # Backup the new results
 mkdir -p ./backups
-cp -r ./tmp/results ./backups/${SLURM_JOB_ID}_results
+cp -r ./results ./backups/${SLURM_JOB_ID}_results
 
 # Move previous output logs except current one to backups
 CURRENT_OUT="mpcgpu_${SLURM_JOB_ID}.out"
