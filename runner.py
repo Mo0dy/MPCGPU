@@ -4,15 +4,30 @@ import os
 from pathlib import Path
 import re
 import numpy as np
+import subprocess
 
 def compile():
     os.system("make clean && make examples")
 
 def run():
     compile()
-    os.system("export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/qdldl/build/out")
-    os.system("./examples/pcg.exe")
-    os.system("./examples/qdldl.exe")
+    current_path = os.environ.get("LD_LIBRARY_PATH", "")
+    new_path = f"{current_path}:{os.getcwd()}/qdldl/build/out"
+    os.environ["LD_LIBRARY_PATH"] = new_path
+
+    # Run the PCG executable and redirect output to the Python script's output
+    try:
+        print("Running pcg.exe...")
+        subprocess.run(["./examples/pcg.exe"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running pcg.exe: {e}")
+
+    # Run the QDLDL executable and redirect output to the Python script's output
+    try:
+        print("Running qdldl.exe...")
+        subprocess.run(["./examples/qdldl.exe"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running qdldl.exe: {e}")
 
 project_root = Path(__file__).parent
 settings_file = project_root / "include/common/settings.cuh"
