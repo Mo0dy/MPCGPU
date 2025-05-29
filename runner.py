@@ -273,6 +273,11 @@ def store_results(name):
     os.rename(results_tmp_dir, results_dir / name)
     results_tmp_dir.mkdir(parents=True, exist_ok=True)
 
+    settings_file_dest = results_dir / name / "settings.cuh"
+    with open(settings_file, 'r') as src:
+        with open(settings_file_dest, 'w') as f:
+            f.write(src.read())
+
 
 if __name__ == "__main__":
     knot_points = [2, 4, 8, 16, 32, 64, 128, 256, 512]
