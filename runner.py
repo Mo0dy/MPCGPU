@@ -10,7 +10,9 @@ def compile():
 
 def run():
     compile()
-    os.system("./run_examples.sh")
+    os.system("export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/qdldl/build/out")
+    os.system("./examples/pcg.exe")
+    os.system("./examples/qdldl.exe")
 
 project_root = Path(__file__).parent
 settings_file = project_root / "include/common/settings.cuh"
