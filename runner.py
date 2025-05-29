@@ -29,6 +29,7 @@ def run_expr(ns: list[int]):
         run()
 
 if __name__ == "__main__":
-    knot_points = np.linspace(2, 512, 10, dtype=int)
+    # knot_points = np.linspace(2, 512, 10, dtype=int)
+    knot_points = [2, 4, 8, 16, 32, 64, 128, 256, 512]
     print("Running experiment for knot_points: " + str(knot_points))
     run_expr(knot_points)
