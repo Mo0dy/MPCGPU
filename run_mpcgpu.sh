@@ -39,3 +39,6 @@ for file in mpcgpu_*.out; do
 	    mv "$file" ./backups/
 	fi
 done
+
+# copy the current log into the result directory
+cp "$CURRENT_OUT" ./results/
