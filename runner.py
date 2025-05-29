@@ -103,7 +103,7 @@ typedef float linsys_t;
 #endif
 
 #ifndef SIMULATION_PERIOD
-#define SIMULATION_PERIOD 2000
+#define SIMULATION_PERIOD {simulation_period}
 #endif
 
 #ifndef MERIT_THREADS
@@ -237,6 +237,7 @@ def write_settings(
         adaptive_max_iters: bool,
         max_iters: int = 10000,
         const_update_freq: bool = False,
+        simulation_period: int = 2000
 ) -> None:
     settings_str = settings_f_str.format(
         knot_points=knot_points,
@@ -244,7 +245,8 @@ def write_settings(
         const_update_freq=int(const_update_freq),
         adaptive_max_iters=(
             "" if adaptive_max_iters else f"#define PCG_MAX_ITER {max_iters}"
-        )
+        ),
+        simulation_period=simulation_period
     )
 
     with open(settings_file, 'w') as f:
@@ -278,11 +280,11 @@ if __name__ == "__main__":
         write_settings(
             knot_points=n,
             time_linsys=False,
-            adaptive_max_iters=True,
-            const_update_freq=False
+            adaptive_max_iters=False,
+            const_update_freq=True
         )
         run()
-    store_results("sqp_time_adaptive")
+    store_results("sim-time=2000_max-iters=10000")
 
     for n in knot_points:
         write_settings(
@@ -293,4 +295,14 @@ if __name__ == "__main__":
             const_update_freq=False
         )
         run()
-    store_results("sqp_time_max_iters=10000")
+    store_results("variable-freq_max-iters=10000")
+
+    for n in knot_points:
+        write_settings(
+            knot_points=n,
+            time_linsys=False,
+            adaptive_max_iters=True,
+            const_update_freq=False
+        )
+        run()
+    store_results("variable-freq_adaptive-max-iters")
