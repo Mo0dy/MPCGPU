@@ -3,9 +3,10 @@
 import os
 from pathlib import Path
 import re
+import numpy as np
 
 def compile():
-    os.system("make clean && make experiment")
+    os.system("make clean && make examples")
 
 def run():
     os.system("./run_examples.sh")
@@ -28,4 +29,6 @@ def run_expr(ns: list[int]):
         run()
 
 if __name__ == "__main__":
-    run_expr([2, 4, 8, 16])
+    knot_points = np.linspace(2, 512, 10, dtype=int)
+    print("Running experiment for knot_points: " + str(knot_points))
+    run_expr(knot_points)
