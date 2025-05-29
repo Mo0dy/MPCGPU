@@ -226,7 +226,7 @@ def write_settings(
     settings_str = settings_f_str.format(
         knot_points=knot_points,
         time_linsys=int(time_linsys),
-        const_update_freq=bool(const_update_freq),
+        const_update_freq=int(const_update_freq),
         adaptive_max_iters=(
             "" if adaptive_max_iters else f"#define PCG_MAX_ITER {max_iters}"
         )
