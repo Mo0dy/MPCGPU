@@ -29,7 +29,7 @@ def run():
     except subprocess.CalledProcessError as e:
         print(f"Error running qdldl.exe: {e}")
 
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent
 settings_file = project_root / "include/common/settings.cuh"
 results_tmp_dir = project_root / "tmp/results"
 results_dir = project_root / "results"
