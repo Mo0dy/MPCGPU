@@ -82,13 +82,6 @@ void form_S_gamma_blockrow(
     T *s_gamma_k    = s_theta_k + state_size*state_size;    // state
     T *s_end_main   = s_gamma_k + state_size;               // <- scratch ptr
 
-    // Convenience lambdas -----------------------------------------------------
-    auto add_identity = [=] __device__ (T *A, uint32_t dim, T coef)
-    {
-        for (unsigned i = threadIdx.x; i < dim; i += blockDim.x)
-            A[i*dim + i] += coef;
-    };
-
     // -------------------------------------------------------------------------
     // LEADING BLOCK ROW (k = 0)  — handles Q₀/Qᴺ set‑up, γ₀ etc.
     // -------------------------------------------------------------------------
