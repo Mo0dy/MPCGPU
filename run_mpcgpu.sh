@@ -7,7 +7,7 @@
 #SBATCH --mem=8G
 #SBATCH --time=04:00:00
 #SBATCH --output=mpcgpu_%j.out
-#SBATCH --error=mpcgpu_%j.err
+#SBATCH --error=mpcgpu_%j.out
 #SBATCH --mail-type=END
 #SBATCH --mail-user=felix.muehlenberend@mailbox.org
 
