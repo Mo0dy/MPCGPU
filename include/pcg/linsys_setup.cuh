@@ -3,7 +3,7 @@
 #include "gpuassert.cuh"
 #include "glass.cuh"
 #include "utils/matrix.cuh"
-
+#include "settings.cuh"
 
 
 template <typename T>
@@ -626,9 +626,9 @@ void form_schur_system(
     T *d_C_dense, 
     T *d_g, 
     T *d_c, 
-    T *d_S, 
-    T *d_Pinv, 
-    T *d_gamma,            
+    T *d_S,
+    T *d_Pinv,
+    T *d_gamma,
     T rho
 ){
     const uint32_t s_temp_size = sizeof(T)*(8 * state_size*state_size +

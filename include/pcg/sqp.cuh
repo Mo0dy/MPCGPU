@@ -11,7 +11,11 @@
 #include <cuda_runtime.h>
 #include <tuple>
 #include <time.h>
+#if ENABLE_PRECONDITIONING
 #include "linsys_setup.cuh"
+#else
+#include "linsys_setup_no_precond.cuh"
+#endif // ENABLE_PRECONDITIONING
 #include "common/kkt.cuh"
 #include "common/dz.cuh"
 #include "merit.cuh"
@@ -114,8 +118,10 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     
 
     // pcg things
+#if ENABLE_PRECONDITIONING
     T *d_Pinv;
     gpuErrchk(cudaMalloc(&d_Pinv, 3*states_sq*knot_points*sizeof(T)));
+#endif // ENABLE_PRECONDITIONING
     
     /*   PCG vars   */
     T  *d_r, *d_p, *d_v_temp, *d_eta_new_temp;// *d_r_tilde, *d_upsilon;
@@ -133,10 +139,12 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     bool pcg_exit;
     bool *d_pcg_exit;
     gpuErrchk(cudaMalloc(&d_pcg_exit, sizeof(bool)));
-    
+
     void *pcgKernelArgs[] = {
         (void *)&d_S,
+#if ENABLE_PRECONDITIONING
         (void *)&d_Pinv,
+#endif // ENABLE_PRECONDITIONING
         (void *)&d_gamma, 
         (void *)&d_lambda,
         (void *)&d_r,
@@ -212,8 +220,10 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
             d_C_dense, 
             d_g, 
             d_c,
-            d_S, 
-            d_Pinv, 
+            d_S,
+#if ENABLE_PRECONDITIONING
+            d_Pinv,
+#endif // ENABLE_PRECONDITIONING
             d_gamma,
             rho
         );
@@ -379,7 +389,9 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     gpuErrchk(cudaFree(d_xs));
     gpuErrchk(cudaFree(d_pcg_iters));
     gpuErrchk(cudaFree(d_pcg_exit));
+#if ENABLE_PRECONDITIONING
     gpuErrchk(cudaFree(d_Pinv));
+#endif // ENABLE_PRECONDITIONING
     gpuErrchk(cudaFree(d_r));
     gpuErrchk(cudaFree(d_p));
     gpuErrchk(cudaFree(d_v_temp));

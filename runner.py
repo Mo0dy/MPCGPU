@@ -38,7 +38,6 @@ results_dir.mkdir(parents=True, exist_ok=True)
 
 settings_f_str = """#pragma once
 
-
 #ifndef KNOT_POINTS
 #define KNOT_POINTS {knot_points}
 #endif
@@ -134,6 +133,7 @@ typedef float linsys_t;
  *                           Linsys Settings                               *
  *******************************************************************************/
 
+#define ENABLE_PRECONDITIONING {enable_preconditioning}
 
 /* time_linsys = 1 to record linear system solve times.
 time_linsys = 0 to record number of sqp iterations.
@@ -237,7 +237,8 @@ def write_settings(
         adaptive_max_iters: bool,
         max_iters: int = 10000,
         const_update_freq: bool = False,
-        simulation_period: int = 2000
+        simulation_period: int = 2000,
+        enable_preconditioning: bool = True
 ) -> None:
 
     print(f"""Writing settings.cuh with the following parameters:
@@ -246,7 +247,9 @@ def write_settings(
     adaptive_max_iters: {adaptive_max_iters}
     max_iters: {max_iters}
     const_update_freq: {const_update_freq}
-    simulation_period: {simulation_period}""")
+    simulation_period: {simulation_period}
+    enable_preconditioning: {enable_preconditioning}
+""")
 
     settings_str = settings_f_str.format(
         knot_points=knot_points,
@@ -255,7 +258,8 @@ def write_settings(
         adaptive_max_iters=(
             "" if adaptive_max_iters else f"#define PCG_MAX_ITER {max_iters}"
         ),
-        simulation_period=simulation_period
+        simulation_period=simulation_period,
+        enable_preconditioning=int(enable_preconditioning)
     )
 
     with open(settings_file, 'w') as f:
