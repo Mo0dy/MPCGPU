@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import re
 import numpy as np
 import subprocess
+from dataclasses import dataclass
+from typing import Callable
 
 def compile():
     os.system("make clean && make examples")
@@ -265,22 +268,6 @@ def write_settings(
     with open(settings_file, 'w') as f:
         f.write(settings_str)
 
-def set_knot_points(n: int):
-    with open(settings_file, 'r') as f:
-        content = f.read()
-
-    content = re.sub(r'#define\s+KNOT_POINTS\s+\d+', f'#define KNOT_POINTS {n}', content)
-
-    with open(settings_file, 'w') as f:
-        f.write(content)
-
-def run_expr(ns: list[int]):
-    for n in ns:
-        set_knot_points(n)
-        compile()
-        run()
-
-
 def store_results(name):
     """Copies the results tmp dir into the actual results dir with the specified name."""
     print(f"Storing results in {name}...")
@@ -297,42 +284,34 @@ def print_experiment_header(experiment: str):
     print(f"Running experiment: {experiment}")
     print("=========================================================================")
 
-if __name__ == "__main__":
-    print_experiment_header("START")
 
-    knot_points = [2, 4, 8, 16, 32, 64, 128, 256, 512]
-    print_experiment_header("sim-time=2000_max-iters=10000")
+@contextmanager
+def expr(name: str):
+    print_experiment_header(name)
+    yield
+    store_results(name)
+    print("Finished experiment:", name)
+
+def run_expr(
+    knot_points: int | list[int],
+    time_linsys: bool,
+    adaptive_max_iters: bool,
+    max_iters: int = 10000,
+    const_update_freq: bool = False,
+    simulation_period: int = 2000,
+    enable_preconditioning: bool = True
+):
+    if isinstance(knot_points, int):
+        knot_points = [knot_points]
     for n in knot_points:
         write_settings(
             knot_points=n,
-            time_linsys=False,
-            adaptive_max_iters=False,
-            const_update_freq=True
+            time_linsys=time_linsys,
+            adaptive_max_iters=adaptive_max_iters,
+            max_iters=max_iters,
+            const_update_freq=const_update_freq,
+            simulation_period=simulation_period,
+            enable_preconditioning=enable_preconditioning
         )
+        compile()
         run()
-    store_results("sim-time=2000_max-iters=10000")
-
-    print_experiment_header("sim-time=2000_adaptive-max-iters")
-    for n in knot_points:
-        write_settings(
-            knot_points=n,
-            time_linsys=False,
-            adaptive_max_iters=False,
-            max_iters=10000,
-            const_update_freq=False
-        )
-        run()
-    store_results("variable-freq_max-iters=10000")
-
-    print_experiment_header("sim-time=2000_variable-freq_adaptive-max-iters")
-    for n in knot_points:
-        write_settings(
-            knot_points=n,
-            time_linsys=False,
-            adaptive_max_iters=True,
-            const_update_freq=False
-        )
-        run()
-    store_results("variable-freq_adaptive-max-iters")
-
-    print_experiment_header("DONE")

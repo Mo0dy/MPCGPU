@@ -33,7 +33,7 @@ fi
 mkdir -p ./results
 
 # Execute your program
-python -u runner.py
+python -u "$1"
 # ./examples/pcg.exe
 # ./examples/qdldl.exe
 
