@@ -3,11 +3,8 @@
 from contextlib import contextmanager
 import os
 from pathlib import Path
-import re
-import numpy as np
 import subprocess
-from dataclasses import dataclass
-from typing import Callable
+from typing import List
 
 def compile():
     os.system("make clean && make examples")
@@ -293,7 +290,7 @@ def expr(name: str):
     print("Finished experiment:", name)
 
 def run_expr(
-    knot_points: int | list[int],
+    knot_points: int | List[int],
     time_linsys: bool,
     adaptive_max_iters: bool,
     max_iters: int = 10000,
