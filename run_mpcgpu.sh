@@ -19,20 +19,6 @@ export LD_LIBRARY_PATH=$HOME/Programs/MPCGPU/qdldl/build/out:$LD_LIBRARY_PATH
 # Navigate to the directory containing your executables
 cd $HOME/Programs/MPCGPU
 
-if [ -d "./results" ]; then
-	rm -rf ./results
-fi
-mkdir -p ./results
-
-# Execute your program
-python runner.py
-# ./examples/pcg.exe
-# ./examples/qdldl.exe
-
-# Backup the new results
-mkdir -p ./backups
-cp -r ./results ./backups/${SLURM_JOB_ID}_results
-
 # Move previous output logs except current one to backups
 CURRENT_OUT="mpcgpu_${SLURM_JOB_ID}.out"
 for file in mpcgpu_*.out; do
@@ -40,6 +26,21 @@ for file in mpcgpu_*.out; do
 	    mv "$file" ./backups/
 	fi
 done
+
+if [ -d "./results" ]; then
+	rm -rf ./results
+fi
+mkdir -p ./results
+
+# Execute your program
+python -u runner.py
+# ./examples/pcg.exe
+# ./examples/qdldl.exe
+
+# Backup the new results
+mkdir -p ./backups
+cp -r ./results ./backups/${SLURM_JOB_ID}_results
+
 
 # copy the current log into the result directory
 cp "$CURRENT_OUT" ./results/
