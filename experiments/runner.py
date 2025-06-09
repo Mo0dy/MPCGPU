@@ -4,7 +4,7 @@ from contextlib import contextmanager
 import os
 from pathlib import Path
 import subprocess
-from typing import List
+from typing import List, Union
 
 def compile():
     os.system("make clean && make examples")
@@ -290,7 +290,7 @@ def expr(name: str):
     print("Finished experiment:", name)
 
 def run_expr(
-    knot_points: int | List[int],
+    knot_points: Union[int, List[int]],
     time_linsys: bool,
     adaptive_max_iters: bool,
     max_iters: int = 10000,
