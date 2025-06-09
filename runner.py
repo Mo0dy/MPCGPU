@@ -239,6 +239,15 @@ def write_settings(
         const_update_freq: bool = False,
         simulation_period: int = 2000
 ) -> None:
+
+    print(f"""Writing settings.cuh with the following parameters:
+    knot_points: {knot_points}
+    time_linsys: {time_linsys}
+    adaptive_max_iters: {adaptive_max_iters}
+    max_iters: {max_iters}
+    const_update_freq: {const_update_freq}
+    simulation_period: {simulation_period}""")
+
     settings_str = settings_f_str.format(
         knot_points=knot_points,
         time_linsys=int(time_linsys),
@@ -270,6 +279,7 @@ def run_expr(ns: list[int]):
 
 def store_results(name):
     """Copies the results tmp dir into the actual results dir with the specified name."""
+    print(f"Storing results in {name}...")
     os.rename(results_tmp_dir, results_dir / name)
     results_tmp_dir.mkdir(parents=True, exist_ok=True)
 
@@ -278,9 +288,16 @@ def store_results(name):
         with open(settings_file_dest, 'w') as f:
             f.write(src.read())
 
+def print_experiment_header(experiment: str):
+    print("=========================================================================")
+    print(f"Running experiment: {experiment}")
+    print("=========================================================================")
 
 if __name__ == "__main__":
+    print_experiment_header("START")
+
     knot_points = [2, 4, 8, 16, 32, 64, 128, 256, 512]
+    print_experiment_header("sim-time=2000_max-iters=10000")
     for n in knot_points:
         write_settings(
             knot_points=n,
@@ -291,6 +308,7 @@ if __name__ == "__main__":
         run()
     store_results("sim-time=2000_max-iters=10000")
 
+    print_experiment_header("sim-time=2000_adaptive-max-iters")
     for n in knot_points:
         write_settings(
             knot_points=n,
@@ -302,6 +320,7 @@ if __name__ == "__main__":
         run()
     store_results("variable-freq_max-iters=10000")
 
+    print_experiment_header("sim-time=2000_variable-freq_adaptive-max-iters")
     for n in knot_points:
         write_settings(
             knot_points=n,
@@ -311,3 +330,5 @@ if __name__ == "__main__":
         )
         run()
     store_results("variable-freq_adaptive-max-iters")
+
+    print_experiment_header("DONE")
