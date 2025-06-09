@@ -8,7 +8,7 @@
 #SBATCH --time=04:00:00
 #SBATCH --output=mpcgpu_%j.out
 #SBATCH --error=mpcgpu_%j.out
-#SBATCH --mail-type=END
+#SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=felix.muehlenberend@mailbox.org
 
 # Load necessary modules (if required)
@@ -33,7 +33,7 @@ fi
 mkdir -p ./results
 
 # Execute your program
-python -u "$1"
+python -u "$1" || exit $?
 # ./examples/pcg.exe
 # ./examples/qdldl.exe
 
