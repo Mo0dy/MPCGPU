@@ -3,10 +3,11 @@
 #SBATCH --partition=gpu_h100
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=8G
 #SBATCH --time=01:00:00
 #SBATCH --output=mpcgpu_%j.out
+#SBATCH --error=mpcgpu_%j.err
 #SBATCH --mail-type=END
 #SBATCH --mail-user=felix.muehlenberend@mailbox.org
 
