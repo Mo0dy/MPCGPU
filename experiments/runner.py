@@ -235,10 +235,10 @@ def write_settings(
         knot_points: int,
         time_linsys: bool,
         adaptive_max_iters: bool,
-        max_iters: int = 10000,
-        const_update_freq: bool = False,
-        simulation_period: int = 2000,
-        enable_preconditioning: bool = True
+        max_iters: int,
+        const_update_freq: bool,
+        simulation_period: int,
+        enable_preconditioning: bool
 ) -> None:
 
     print(f"""Writing settings.cuh with the following parameters:
@@ -293,7 +293,7 @@ def run_expr(
     knot_points: Union[int, List[int]],
     time_linsys: bool,
     adaptive_max_iters: bool,
-    max_iters: int = 10000,
+    max_iters: int = 200,
     const_update_freq: bool = False,
     simulation_period: int = 2000,
     enable_preconditioning: bool = True
