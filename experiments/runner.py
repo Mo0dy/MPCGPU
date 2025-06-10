@@ -7,7 +7,7 @@ import subprocess
 from typing import List, Union
 
 def compile():
-    os.system("make clean && make examples")
+    os.system("make clean && make examples -j $(nproc)")
 
 def run(run_qdldl: bool = True):
     compile()
