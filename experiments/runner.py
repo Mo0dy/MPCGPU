@@ -255,6 +255,7 @@ def write_settings(
     knot_points: {knot_points}
     time_linsys: {time_linsys}
     adaptive_max_iters: {adaptive_max_iters}
+    fine_grained_timing: {fine_grained_timing}
     pcg_max_iters: {pcg_max_iters}
     const_update_freq: {const_update_freq}
     simulation_period: {simulation_period}
