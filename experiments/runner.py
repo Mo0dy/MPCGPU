@@ -9,7 +9,7 @@ from typing import List, Union
 def compile():
     os.system("make clean && make examples")
 
-def run():
+def run(run_qdldl: bool = True):
     compile()
     current_path = os.environ.get("LD_LIBRARY_PATH", "")
     new_path = f"{current_path}:{os.getcwd()}/qdldl/build/out"
@@ -22,6 +22,8 @@ def run():
     except subprocess.CalledProcessError as e:
         print(f"Error running pcg.exe: {e}")
 
+    if not run_qdldl:
+        return
     # Run the QDLDL executable and redirect output to the Python script's output
     try:
         print("Running qdldl.exe...")
@@ -303,9 +305,10 @@ def run_expr(
     adaptive_max_iters: bool,
     fine_grained_timing: bool = False,
     pcg_max_iters: int = 200,
-    const_update_freq: bool = False,
+    const_update_freq: bool = True,
     simulation_period: int = 2000,
-    enable_preconditioning: bool = True
+    enable_preconditioning: bool = True,
+    run_qdldl: bool = True
 ):
     if isinstance(knot_points, int):
         knot_points = [knot_points]
@@ -321,4 +324,4 @@ def run_expr(
             enable_preconditioning=enable_preconditioning
         )
         compile()
-        run()
+        run(run_qdldl=run_qdldl)
