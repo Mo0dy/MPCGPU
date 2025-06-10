@@ -239,8 +239,8 @@ LINSYS_SOLVE = 0 uses qdldl as the underlying linear system solver */
 def write_settings(
         knot_points: int,
         time_linsys: bool,
-        fine_grained_timing: bool,
         adaptive_max_iters: bool,
+        fine_grained_timing: bool,
         pcg_max_iters: int,
         const_update_freq: bool,
         simulation_period: int,
@@ -314,6 +314,7 @@ def run_expr(
             knot_points=n,
             time_linsys=time_linsys,
             adaptive_max_iters=adaptive_max_iters,
+            fine_grained_timing=fine_grained_timing,
             pcg_max_iters=pcg_max_iters,
             const_update_freq=const_update_freq,
             simulation_period=simulation_period,
