@@ -56,10 +56,26 @@ T compute_tracking_error(uint32_t state_size, T *d_xu_goal, T *d_xs){
 
 
 template <typename T>
-void dump_tracking_data(std::vector<int> *pcg_iters, std::vector<bool> *pcg_exits, std::vector<double> *linsys_times, std::vector<double> *sqp_times, std::vector<uint32_t> *sqp_iters, 
-                std::vector<bool> *sqp_exits, std::vector<T> *tracking_errors, std::vector<std::vector<T>> *tracking_path, uint32_t timesteps_taken, 
-                uint32_t control_updates_taken, uint32_t start_state_ind, uint32_t goal_state_ind, uint32_t test_iter,
-                std::string filename_prefix){
+void dump_tracking_data(
+    std::vector<int> *pcg_iters,
+    std::vector<bool> *pcg_exits,
+    std::vector<double> *linsys_times,
+    std::vector<double> *sqp_times,
+    std::vector<uint32_t> *sqp_iters,
+    std::vector<bool> *sqp_exits,
+    std::vector<T> *tracking_errors,
+    std::vector<std::vector<T>> *tracking_path,
+    uint32_t timesteps_taken,
+    uint32_t control_updates_taken,
+    uint32_t start_state_ind,
+    uint32_t goal_state_ind,
+    uint32_t test_iter,
+    std::string filename_prefix,
+    std::vector<double> *ktt_time_vec,
+    std::vector<double> *shur_time_vec,
+    std::vector<double> *dz_time_vec,
+    std::vector<double> *line_search_time_vec
+){
     // Helper function to create file names
     auto createFileName = [&](const std::string& data_type) {
         std::string filename = filename_prefix + "_" + std::to_string(test_iter) + "_" + data_type + ".result";
@@ -88,6 +104,13 @@ void dump_tracking_data(std::vector<int> *pcg_iters, std::vector<bool> *pcg_exit
     dumpVectorData(tracking_errors, "tracking_errors");
     dumpVectorData(pcg_exits, "pcg_exits");
 
+    // for FINE_GRAINED_TIMING
+#if LINSYS_SOLVE == 1 && FINE_GRAINED_TIMING
+    dumpVectorData(ktt_time_vec, "ktt_times");
+    dumpVectorData(shur_time_vec, "shur_times");
+    dumpVectorData(dz_time_vec, "dz_times");
+    dumpVectorData(line_search_time_vec, "line_search_times");
+#endif // #if LINSYS_SOLVE == 1 && FINE_GRAINED_TIMING
 
     // Dump two-dimension vector data (tracking_path)
     std::ofstream file(createFileName("tracking_path"));
@@ -164,6 +187,7 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
 
 
     // vars for recording data
+    // NOTE: @Felix the current vectors are never really freed ... should not matter that much right?
     std::vector<std::vector<T>> tracking_path;      // list of traversed traj
     std::vector<int> linsys_iters;
     std::vector<double> linsys_times;
@@ -180,6 +204,11 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     T cur_tracking_error;
     int control_update_step;
 
+#if LINSYS_SOLVE == 1
+    // For potentially recording fine-grained timing
+    std::vector<double> ktt_time_vec, shur_time_vec, dz_time_vec, line_search_time_vec;
+    std::vector<double> cur_ktt_time_vec, cur_shur_time_vec, cur_dz_time_vec, cur_line_search_time_vec;
+#endif // #if LINSYS_SOLVE == 1
 
     // mpc iterates
     T *d_lambda, *d_eePos_goal, *d_xu, *d_xu_old;
@@ -276,6 +305,15 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         sqp_exits.push_back(std::get<4>(sqp_stats));
         cur_linsys_exits = std::get<5>(sqp_stats);
 
+    #if LINSYS_SOLVE == 1
+        // For FINE_GRAINED_TIMING
+        // @Felix weird location ... but we just copy what they did in the original code
+        cur_ktt_time_vec = std::get<6>(sqp_stat),
+        cur_shur_time_vec = std::get<7>(sqp_stat),
+        cur_dz_time_vec = std::get<8>(sqp_stat),
+        cur_line_search_time_vec = std::get<9>(sqp_stat),
+    #endif // LINSYS_SOLVE == 1
+
 
 #if CONST_UPDATE_FREQ
         simulation_time = SIMULATION_PERIOD;
@@ -363,6 +401,14 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         sqp_times.push_back(sqp_solve_time_us);
         sqp_iters.push_back(cur_sqp_iters);
 
+    #if LINSYS_SOLVE == 1
+        // For FINE_GRAINED_TIMING
+        ktt_time_vec.insert(ktt_time_vec.end(), cur_ktt_time_vec.begin(), cur_ktt_time_vec.end());
+        shur_time_vec.insert(shur_time_vec.end(), cur_shur_time_vec.begin(), cur_shur_time_vec.end());
+        dz_time_vec.insert(dz_time_vec.end(), cur_dz_time_vec.begin(), cur_dz_time_vec.end());
+        line_search_time_vec.insert(line_search_time_vec.end(), cur_line_search_time_vec.begin(), cur_line_search_time_vec.end());
+    #endif // LINSYS_SOLVE == 1
+
 
 #if LIVE_PRINT_STATS
         if (control_update_step % 1000 == 50){
@@ -396,8 +442,26 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
 
     }
 #if SAVE_DATA
-    dump_tracking_data(&linsys_iters, &linsys_exits, &linsys_times, &sqp_times, &sqp_iters, &sqp_exits, &tracking_errors, &tracking_path, 
-            traj_offset, control_update_step, start_state_ind, goal_state_ind, test_iter, test_output_prefix);
+    dump_tracking_data(
+        &linsys_iters,
+        &linsys_exits,
+        &linsys_times,
+        &sqp_times,
+        &sqp_iters,
+        &sqp_exits,
+        &tracking_errors,
+        &tracking_path,
+        traj_offset,
+        control_update_step,
+        start_state_ind,
+        goal_state_ind,
+        test_iter,
+        test_output_prefix,
+        &ktt_time_vec,
+        &shur_time_vec,
+        &dz_time_vec,
+        &line_search_time_vec
+    );
 #endif
     
 
