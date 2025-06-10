@@ -29,8 +29,15 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     std::vector<int> pcg_iter_vec;
     std::vector<bool> pcg_exit_vec;
     std::vector<double> linsys_time_vec;
+    std::vector<double> ktt_time_vec;
+    std::vector<double> shur_time_vec;
+    std::vector<double> dz_time_vec;
+    std::vector<double> line_search_time_vec;
     bool sqp_time_exit = 1;     // for data recording, not a flag
-    
+
+#if FINE_GRAINED_TIMING
+    timespec ktt_start, ktt_end, shur_start, shur_end, dz_start, dz_end, ls_start, ls_end;
+#endif // FINE_GRAINED_TIMING
 
 
     // sqp timing
@@ -194,7 +201,14 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     //      SQP LOOP
     //
     for(uint32_t sqpiter = 0; sqpiter < SQP_MAX_ITER; sqpiter++){
-        
+        // We also time the total time of the sqp loop (to see how large the overhead is)
+        // Note that this includes a lot of time necessary for instrumentation (synchronization)
+
+    #if FINE_GRAINED_TIMING
+        gpuErrchk(cudaDeviceSynchronize());
+        clock_gettime(CLOCK_MONOTONIC,&ktt_start);
+    #endif // FINE_GRAINED_TIMING
+
         generate_kkt_submatrices<T><<<knot_points, KKT_THREADS, 2 * get_kkt_smem_size<T>(state_size, control_size)>>>(
             state_size,
             control_size,
@@ -210,7 +224,21 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
             d_xu
         );
         gpuErrchk(cudaPeekAtLastError());
+
+    #if FINE_GRAINED_TIMING
+        gpuErrchk(cudaDeviceSynchronize());
+        clock_gettime(CLOCK_MONOTONIC,&ktt_end);
+        double ktt_time = time_delta_us_timespec(ktt_start,ktt_end);
+        ktt_time_vec.push_back(ktt_time);
+    #endif // FINE_GRAINED_TIMING
+
         if (sqpTimecheck()){ break; }
+
+    #if FINE_GRAINED_TIMING
+        // NOTE: probably not necessary to synchronize here, but it is done for consistency
+        gpuErrchk(cudaDeviceSynchronize());
+        clock_gettime(CLOCK_MONOTONIC,&shur_start);
+    #endif // FINE_GRAINED_TIMING
 
         form_schur_system<T>(
             state_size, 
@@ -228,8 +256,15 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
             rho
         );
         gpuErrchk(cudaPeekAtLastError());
+
+    #if FINE_GRAINED_TIMING
+        gpuErrchk(cudaDeviceSynchronize());
+        clock_gettime(CLOCK_MONOTONIC,&shur_end);
+        double shur_time = time_delta_us_timespec(shur_start,shur_end);
+        shur_time_vec.push_back(shur_time);
+    #endif // FINE_GRAINED_TIMING
+
         if (sqpTimecheck()){ break; }
-        
 
     #if TIME_LINSYS    
         gpuErrchk(cudaDeviceSynchronize());
@@ -255,7 +290,12 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
 
         
         if (sqpTimecheck()){ break; }
-        
+
+    #if FINE_GRAINED_TIMING
+        gpuErrchk(cudaDeviceSynchronize());
+        clock_gettime(CLOCK_MONOTONIC,&dz_start);
+    #endif // FINE_GRAINED_TIMING
+
         // recover dz
         compute_dz(
             state_size,
@@ -268,8 +308,20 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
             d_dz
         );
         gpuErrchk(cudaPeekAtLastError());
+
+    #if FINE_GRAINED_TIMING
+        gpuErrchk(cudaDeviceSynchronize());
+        clock_gettime(CLOCK_MONOTONIC,&dz_end);
+        double dz_time = time_delta_us_timespec(dz_start,dz_end);
+        dz_time_vec.push_back(dz_time);
+    #endif // FINE_GRAINED_TIMING
+
         if (sqpTimecheck()){ break; }
-        
+
+    #if FINE_GRAINED_TIMING
+        gpuErrchk(cudaDeviceSynchronize());
+        clock_gettime(CLOCK_MONOTONIC,&ls_start);
+    #endif // FINE_GRAINED_TIMING
 
         // line search
         for(uint32_t p = 0; p < num_alphas; p++){
@@ -290,11 +342,18 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
             };
             gpuErrchk(cudaLaunchCooperativeKernel(ls_merit_kernel, knot_points, MERIT_THREADS, kernelArgs, get_merit_smem_size<T>(state_size, knot_points), streams[p]));
         }
-        if (sqpTimecheck()){ break; }
         gpuErrchk(cudaPeekAtLastError());
         gpuErrchk(cudaDeviceSynchronize());
-        
-        
+
+    #if FINE_GRAINED_TIMING
+        clock_gettime(CLOCK_MONOTONIC,&ls_end);
+        double ls_time = time_delta_us_timespec(ls_start,ls_end);
+        line_search_time_vec.push_back(ls_time);
+    #endif // FINE_GRAINED_TIMING
+
+
+        if (sqpTimecheck()){ break; }
+
         cudaMemcpy(h_merit_news, d_merit_news, 8*sizeof(T), cudaMemcpyDeviceToHost);
         if (sqpTimecheck()){ break; }
 

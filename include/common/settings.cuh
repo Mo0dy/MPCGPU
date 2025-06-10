@@ -111,6 +111,12 @@ time_linsys = 0 to record number of sqp iterations.
 In both cases, the tracking error will also be recorded. */
 
 #define TIME_LINSYS 0
+#define FINE_GRAINED_TIMING 0
+
+// if fine grained timing is enabled require that time linsys is also enabled
+#if FINE_GRAINED_TIMING && !TIME_LINSYS
+#error "Fine grained timing requires time linsys to be enabled"
+#endif
 
 #ifndef PCG_NUM_THREADS
 #define PCG_NUM_THREADS	128

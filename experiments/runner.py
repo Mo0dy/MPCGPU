@@ -140,6 +140,11 @@ time_linsys = 0 to record number of sqp iterations.
 In both cases, the tracking error will also be recorded. */
 
 #define TIME_LINSYS {time_linsys}
+#define FINE_GRAINED_TIMING {fine_grained_timing}
+
+#if FINE_GRAINED_TIMING && !TIME_LINSYS
+#error "Fine grained timing requires time linsys to be enabled"
+#endif
 
 #ifndef PCG_NUM_THREADS
 #define PCG_NUM_THREADS	128
@@ -234,18 +239,21 @@ LINSYS_SOLVE = 0 uses qdldl as the underlying linear system solver */
 def write_settings(
         knot_points: int,
         time_linsys: bool,
+        fine_grained_timing: bool,
         adaptive_max_iters: bool,
-        max_iters: int = 10000,
-        const_update_freq: bool = False,
-        simulation_period: int = 2000,
-        enable_preconditioning: bool = True
+        pcg_max_iters: int,
+        const_update_freq: bool,
+        simulation_period: int,
+        enable_preconditioning: bool
 ) -> None:
+    if fine_grained_timing and not time_linsys:
+        raise ValueError("Fine grained timing requires time linsys to be enabled")
 
     print(f"""Writing settings.cuh with the following parameters:
     knot_points: {knot_points}
     time_linsys: {time_linsys}
     adaptive_max_iters: {adaptive_max_iters}
-    max_iters: {max_iters}
+    pcg_max_iters: {pcg_max_iters}
     const_update_freq: {const_update_freq}
     simulation_period: {simulation_period}
     enable_preconditioning: {enable_preconditioning}
@@ -256,7 +264,7 @@ def write_settings(
         time_linsys=int(time_linsys),
         const_update_freq=int(const_update_freq),
         adaptive_max_iters=(
-            "" if adaptive_max_iters else f"#define PCG_MAX_ITER {max_iters}"
+            "" if adaptive_max_iters else f"#define PCG_MAX_ITER {pcg_max_iters}"
         ),
         simulation_period=simulation_period,
         enable_preconditioning=int(enable_preconditioning)
@@ -293,7 +301,8 @@ def run_expr(
     knot_points: Union[int, List[int]],
     time_linsys: bool,
     adaptive_max_iters: bool,
-    max_iters: int = 10000,
+    fine_grained_timing: bool = False,
+    pcg_max_iters: int = 200,
     const_update_freq: bool = False,
     simulation_period: int = 2000,
     enable_preconditioning: bool = True
@@ -305,7 +314,7 @@ def run_expr(
             knot_points=n,
             time_linsys=time_linsys,
             adaptive_max_iters=adaptive_max_iters,
-            max_iters=max_iters,
+            pcg_max_iters=pcg_max_iters,
             const_update_freq=const_update_freq,
             simulation_period=simulation_period,
             enable_preconditioning=enable_preconditioning
