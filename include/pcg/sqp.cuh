@@ -470,6 +470,6 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
         ktt_time_vec,
         shur_time_vec,
         dz_time_vec,
-        line_search_time_vec,
+        line_search_time_vec
     );
 }

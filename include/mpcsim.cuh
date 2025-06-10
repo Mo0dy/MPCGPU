@@ -199,16 +199,24 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     std::vector<int> cur_linsys_iters;
     std::vector<bool> cur_linsys_exits;
     std::vector<double> cur_linsys_times;
-    std::tuple<std::vector<int>, std::vector<double>, double, uint32_t, bool, std::vector<bool>> sqp_stats;
+    std::tuple<
+        std::vector<int>,
+        std::vector<double>,
+        double,
+        uint32_t,
+        bool,
+        std::vector<bool>,
+        std::vector<double>,
+        std::vector<double>,
+        std::vector<double>,
+        std::vector<double>> sqp_stats;
     uint32_t cur_sqp_iters;
     T cur_tracking_error;
     int control_update_step;
 
-#if LINSYS_SOLVE == 1
     // For potentially recording fine-grained timing
     std::vector<double> ktt_time_vec, shur_time_vec, dz_time_vec, line_search_time_vec;
     std::vector<double> cur_ktt_time_vec, cur_shur_time_vec, cur_dz_time_vec, cur_line_search_time_vec;
-#endif // #if LINSYS_SOLVE == 1
 
     // mpc iterates
     T *d_lambda, *d_eePos_goal, *d_xu, *d_xu_old;
@@ -308,10 +316,10 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     #if LINSYS_SOLVE == 1
         // For FINE_GRAINED_TIMING
         // @Felix weird location ... but we just copy what they did in the original code
-        cur_ktt_time_vec = std::get<6>(sqp_stat),
-        cur_shur_time_vec = std::get<7>(sqp_stat),
-        cur_dz_time_vec = std::get<8>(sqp_stat),
-        cur_line_search_time_vec = std::get<9>(sqp_stat),
+        cur_ktt_time_vec = std::get<6>(sqp_stats),
+        cur_shur_time_vec = std::get<7>(sqp_stats),
+        cur_dz_time_vec = std::get<8>(sqp_stats),
+        cur_line_search_time_vec = std::get<9>(sqp_stats),
     #endif // LINSYS_SOLVE == 1
 
 

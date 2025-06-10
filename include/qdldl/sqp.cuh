@@ -431,5 +431,16 @@ auto sqpSolveQdldl(uint32_t state_size, uint32_t control_size, uint32_t knot_poi
 
     double sqp_solve_time = time_delta_us_timespec(sqp_solve_start, sqp_solve_end);
 
-    return std::make_tuple(linsys_iter_vec, linsys_time_vec, sqp_solve_time, sqp_iter, sqp_time_exit, linsys_exit_vec);
+    return std::make_tuple(
+        linsys_iter_vec,
+        linsys_time_vec,
+        sqp_solve_time,
+        sqp_iter,
+        sqp_time_exit,
+        linsys_exit_vec,
+        std::vector<double>(),
+        std::vector<double>(),
+        std::vector<double>(),
+        std::vector<double>()
+    );
 }
