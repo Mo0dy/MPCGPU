@@ -14,6 +14,66 @@
 # Load necessary modules (if required)
 module load devel/cuda
 
+LOG_GPU=0
+SCRIPT=""
+
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		--sample)
+			LOG_GPU=1
+			shift # Remove --sample from processing
+			;;
+		--help|-h)
+			echo "Usage: $0 [--sample] <script>"
+			echo "Options:"
+			echo "  --sample    Enable GPU memory sampling"
+			echo "  --help, -h  Show this help message"
+			exit 0
+			;;
+		*)
+			if [[ -n "$SCRIPT" ]]; then
+				echo "Error: Multiple scripts provided. Only one script can be run at a time."
+				exit 1
+			fi
+			SCRIPT="$1"
+			shift # Remove the script name from processing
+			break # Stop processing further arguments
+			;;
+	esac
+done
+
+# Ensure a script is provided
+if [[ -z "$SCRIPT" ]]; then
+	echo "Error: No script provided to run."
+	echo "Usage: $0 [--sample] <script>"
+	exit 1
+fi
+
+SAMPLE_MS=500
+
+RAW_LOG="gpu_memory_${SLURM_JOB_ID}.csv"
+SUMMARY_LOG="gpu_memory_summary_${SLURM_JOB_ID}.txt"
+
+start_gpu_sampler () {
+    [[ $LOG_GPU -eq 0 ]] && return
+
+    (
+        echo "timestamp,mem_used_MiB"
+        stdbuf -oL nvidia-smi --query-gpu=timestamp,memory.used \
+                              --format=csv,noheader,nounits \
+                              --loop-ms="$SAMPLE_MS"
+    ) >> "$RAW_LOG" &
+    GPU_SAMPLER_PID=$!
+}
+
+stop_gpu_sampler () {
+    [[ -n $GPU_SAMPLER_PID ]] && kill "$GPU_SAMPLER_PID"
+    [[ $LOG_GPU -eq 0 ]] && return
+
+    PEAK=$(awk -F',' 'NR>1 && $2>max{max=$2} END{print max}' "$RAW_LOG")
+    echo "Peak GPU memory: ${PEAK} MiB"
+    echo "job ${SLURM_JOB_ID}: peak ${PEAK} MiB" >> "$SUMMARY_LOG"
+}
 export LD_LIBRARY_PATH=$HOME/Programs/MPCGPU/qdldl/build/out:$LD_LIBRARY_PATH
 
 # Navigate to the directory containing your executables
@@ -33,9 +93,9 @@ fi
 mkdir -p ./results
 
 # Execute your program
-python -u "$1" || exit $?
-# ./examples/pcg.exe
-# ./examples/qdldl.exe
+start_gpu_sampler
+python -u "$SCRIPT" || exit $?
+stop_gpu_sampler
 
 # Backup the new results
 mkdir -p ./backups
