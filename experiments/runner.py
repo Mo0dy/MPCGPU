@@ -10,6 +10,7 @@ def compile():
     os.system("make clean && make examples -j $(nproc)")
 
 def run(run_qdldl: bool = True):
+    results_tmp_dir.mkdir(parents=True, exist_ok=True)
     compile()
     current_path = os.environ.get("LD_LIBRARY_PATH", "")
     new_path = f"{current_path}:{os.getcwd()}/qdldl/build/out"
