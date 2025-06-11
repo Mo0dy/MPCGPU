@@ -12,6 +12,7 @@ if __name__ == "__main__":
             const_update_freq=True
         )
 
+    # NOTE: way too many max iters
     with expr("sim-time=2000_adaptive-max-iters"):
         run_expr(
             knot_points=knot_points,
