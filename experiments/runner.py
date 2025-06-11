@@ -10,6 +10,10 @@ def compile():
     os.system("make clean && make examples -j $(nproc)")
 
 def run(run_qdldl: bool = True):
+    if results_tmp_dir.exists():
+        for item in results_tmp_dir.iterdir():
+            item.unlink()
+        results_tmp_dir.rmdir()
     results_tmp_dir.mkdir(parents=True, exist_ok=True)
     compile()
     current_path = os.environ.get("LD_LIBRARY_PATH", "")
