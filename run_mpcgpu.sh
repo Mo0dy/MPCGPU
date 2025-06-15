@@ -104,8 +104,10 @@ mkdir -p ./results
 
 # Execute your program
 start_gpu_sampler
+start_proc_monitor
 python -u "$SCRIPT" || exit $?
 stop_gpu_sampler
+stop_proc_monitor
 
 # Backup the new results
 mkdir -p ./backups
