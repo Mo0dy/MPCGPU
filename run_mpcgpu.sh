@@ -69,7 +69,7 @@ start_gpu_sampler () {
 
 start_proc_monitor () {
     [[ $LOG_GPU -eq 0 ]] && return
-    stdbuf -oL nvidia-smi pmon -s u -d 1 -c 0 -o T >> "$PMON_LOG" &
+    stdbuf -oL nvidia-smi pmon -s u -d 1 -o T >> "$PMON_LOG" &
     PMON_PID=$!
 }
 
