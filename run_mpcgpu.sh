@@ -66,6 +66,12 @@ start_gpu_sampler () {
     GPU_SAMPLER_PID=$!
 }
 
+start_proc_monitor () {
+    [[ $LOG_GPU -eq 0 ]] && return
+    stdbuf -oL nvidia-smi pmon -s u -d 1 -c 0 -o T >> "$PMON_LOG" &
+    PMON_PID=$!
+}
+
 stop_gpu_sampler () {
     [[ -n $GPU_SAMPLER_PID ]] && kill "$GPU_SAMPLER_PID"
     [[ $LOG_GPU -eq 0 ]] && return
@@ -74,6 +80,9 @@ stop_gpu_sampler () {
     echo "Peak GPU memory: ${PEAK} MiB"
     echo "job ${SLURM_JOB_ID}: peak ${PEAK} MiB" >> "$SUMMARY_LOG"
 }
+
+stop_proc_monitor () { [[ -n $PMON_PID ]] && kill $PMON_PID; }
+
 export LD_LIBRARY_PATH=$HOME/Programs/MPCGPU/qdldl/build/out:$LD_LIBRARY_PATH
 
 # Navigate to the directory containing your executables
