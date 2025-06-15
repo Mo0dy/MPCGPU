@@ -53,6 +53,7 @@ SAMPLE_MS=500
 
 RAW_LOG="gpu_memory_${SLURM_JOB_ID}.csv"
 SUMMARY_LOG="gpu_memory_summary_${SLURM_JOB_ID}.txt"
+PMON_LOG="${SLURM_JOB_ID}.pmon.csv"
 
 start_gpu_sampler () {
     [[ $LOG_GPU -eq 0 ]] && return
