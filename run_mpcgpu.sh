@@ -109,7 +109,17 @@ mkdir -p ./results
 # Execute your program
 start_gpu_sampler
 start_proc_monitor
-python -u "$SCRIPT" "$@" || exit $?
+
+# use either python 3.12 or python 3.13 whatever is available
+
+if command -v python3.13 &> /dev/null; then
+    PYTHON_CMD="python3.13"
+else
+    PYTHON_CMD="python3.12"
+fi
+
+$PYTHON_CMD -u "$SCRIPT" "$@" || exit $?
+
 stop_gpu_sampler
 stop_proc_monitor
 
