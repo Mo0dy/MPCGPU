@@ -516,6 +516,6 @@ gpuErrchk(cudaMemset(d_lambda_prev, 0, state_size * knot_points * sizeof(T))); /
         shur_time_vec,
         dz_time_vec,
         line_search_time_vec,
-        pcg_guess_diff_vec,
+        pcg_guess_diff_vec
     );
 }

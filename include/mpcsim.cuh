@@ -75,7 +75,7 @@ void dump_tracking_data(
     std::vector<double> *shur_time_vec,
     std::vector<double> *dz_time_vec,
     std::vector<double> *line_search_time_vec,
-    std::vector<double> *pcg_guess_diff_vec,
+    std::vector<double> *pcg_guess_diff_vec
 ){
     // Helper function to create file names
     auto createFileName = [&](const std::string& data_type) {
