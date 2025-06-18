@@ -3,7 +3,7 @@
 from runner import *
 
 if __name__ == "__main__":
-    knot_points = [2, 8, 16, 32, 64, 128, 256, 512]
+    knot_points = [2, 4, 8, 16, 32, 64, 128, 256, 512]
 
     # Baseline. The settings the paper authors used for the experiments
     run_expr(
