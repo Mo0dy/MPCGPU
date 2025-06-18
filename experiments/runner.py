@@ -23,6 +23,10 @@ class TimingMode(Enum):
     LINSYS = 1
     FINE_GRAINED = 2
 
+    def __str__(self):
+        # without TimingMode.
+        return self.name.lower()
+
 ADAPTIVE = "adaptive"
 Adaptive: TypeAlias = Literal["adaptive"]
 PCGMaxIters: TypeAlias = Union[int, Adaptive]
