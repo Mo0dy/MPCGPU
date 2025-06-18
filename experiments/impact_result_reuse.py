@@ -11,7 +11,7 @@ if __name__ == "__main__":
         knot_points,
         Settings(
             timing_mode=TimingMode.LINSYS,
-            pcg_max_iters=200,
+            pcg_max_iters=800,
             sqp_sim_period=ADAPTIVE,
         ),
         name_prefix="baseline"
@@ -21,7 +21,7 @@ if __name__ == "__main__":
         knot_points,
         Settings(
             timing_mode=TimingMode.LINSYS,
-            pcg_max_iters=200,
+            pcg_max_iters=800,
             sqp_sim_period=ADAPTIVE,
             pcg_result_reuse = PCGResultReuse.NO_RESULT_REUSE,
         ),
@@ -32,7 +32,7 @@ if __name__ == "__main__":
         knot_points,
         Settings(
             timing_mode=TimingMode.LINSYS,
-            pcg_max_iters=200,
+            pcg_max_iters=800,
             sqp_sim_period=ADAPTIVE,
             pcg_result_reuse = PCGResultReuse.MEASURE_CLOSENESS_INITIAL_GUESS
         ),
