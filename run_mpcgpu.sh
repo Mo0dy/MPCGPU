@@ -30,6 +30,10 @@ while [[ $# -gt 0 ]]; do
 			echo "  --help, -h  Show this help message"
 			exit 0
 			;;
+		--) # Pass arguments to python script
+			shift
+			break
+			;;
 		*)
 			if [[ -n "$SCRIPT" ]]; then
 				echo "Error: Multiple scripts provided. Only one script can be run at a time."
@@ -105,7 +109,7 @@ mkdir -p ./results
 # Execute your program
 start_gpu_sampler
 start_proc_monitor
-python -u "$SCRIPT" || exit $?
+python -u "$SCRIPT" "$@" || exit $?
 stop_gpu_sampler
 stop_proc_monitor
 

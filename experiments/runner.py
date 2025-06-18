@@ -4,17 +4,68 @@ from contextlib import contextmanager
 import os
 from pathlib import Path
 import subprocess
-from typing import List, Union
+from typing import List, Union, TypeAlias, Literal
 from datetime import datetime
+from dataclasses import dataclass
+
+from argparse import ArgumentParser
+
+from enum import Enum
+
+# Compatibility with python 3.8
+from typing import Union, List
+
+has_been_initialized = False
+dry_run = False
+
+class TimingMode(Enum):
+    MINIMAL = 0
+    LINSYS = 1
+    FINE_GRAINED = 2
+
+Adaptive: TypeAlias = Literal["adaptive"]
+PCGMaxIters: TypeAlias = Union[int, Adaptive]
+
+
+SimPeriod: TypeAlias = Union[int, Literal["adaptive"]]
+
+
+@dataclass
+class Settings:
+    timing_mode: TimingMode
+    pcg_max_iters: PCGMaxIters
+    sqp_sim_period: SimPeriod = 2000
+    enable_preconditioning: bool = True
+
+    def default():
+        return Settings(
+            timing_mode=TimingMode.MINIMAL,
+            pcg_max_iters="adaptive",
+            sqp_sim_period=2000,
+            enable_preconditioning=True,
+        )
+
+    def __str__(self):
+        return f"timing_mode={self.timing_mode}\npcg_max_iters={self.pcg_max_iters}\nsqp_sim_period={self.sqp_sim_period}\nenable_preconditioning={self.enable_preconditioning}\n"
+
 
 def compile():
     os.system("make clean && make examples -j $(nproc)")
 
 def run(run_qdldl: bool = True):
+    # NOTE: not perfect but better than forgetting
+    if not has_been_initialized:
+        print("Runner has not been initialized. Please call init_runner() first.")
+        exit(1)
+
     compile()
     current_path = os.environ.get("LD_LIBRARY_PATH", "")
     new_path = f"{current_path}:{os.getcwd()}/qdldl/build/out"
     os.environ["LD_LIBRARY_PATH"] = new_path
+
+    if dry_run:
+        print("Dry run mode: only compiling, not running the executables.")
+        return
 
     # Run the PCG executable and redirect output to the Python script's output
     try:
@@ -242,38 +293,28 @@ LINSYS_SOLVE = 0 uses qdldl as the underlying linear system solver */
 
 def write_settings(
         knot_points: int,
-        time_linsys: bool,
-        adaptive_max_iters: bool,
-        fine_grained_timing: bool,
-        pcg_max_iters: int,
-        const_update_freq: bool,
-        simulation_period: int,
-        enable_preconditioning: bool
+        settings: Settings,
 ) -> None:
-    if fine_grained_timing and not time_linsys:
-        raise ValueError("Fine grained timing requires time linsys to be enabled")
-
-    print(f"""Writing settings.cuh with the following parameters:
-    knot_points: {knot_points}
-    time_linsys: {time_linsys}
-    adaptive_max_iters: {adaptive_max_iters}
-    fine_grained_timing: {fine_grained_timing}
-    pcg_max_iters: {pcg_max_iters}
-    const_update_freq: {const_update_freq}
-    simulation_period: {simulation_period}
-    enable_preconditioning: {enable_preconditioning}
-""")
+    print(f"Writing settings to for n={knot_points}", settings_file)
+    time_linsys = int(settings.timing_mode != TimingMode.MINIMAL)
+    fine_grained_timing = int(settings.timing_mode == TimingMode.FINE_GRAINED)
+    const_update_freq = int(settings.sqp_sim_period != "adaptive")
+    # TODO: check if the sim period actually hasno impact if const_update_freq is set to 0
+    simulation_period = 2000 if settings.sqp_sim_period == "adaptive" else settings.sqp_sim_period
+    enable_preconditioning = int(settings.enable_preconditioning)
+    if settings.pcg_max_iters == "adaptive":
+        adaptive_max_iters_str = ""
+    else:
+        adaptive_max_iters_str = "#define PCG_MAX_ITER {}".format(settings.pcg_max_iters)
 
     settings_str = settings_f_str.format(
         knot_points=knot_points,
-        time_linsys=int(time_linsys),
-        fine_grained_timing=int(fine_grained_timing),
-        const_update_freq=int(const_update_freq),
-        adaptive_max_iters=(
-            "" if adaptive_max_iters else f"#define PCG_MAX_ITER {pcg_max_iters}"
-        ),
+        time_linsys=time_linsys,
+        fine_grained_timing=fine_grained_timing,
+        const_update_freq=const_update_freq,
+        adaptive_max_iters=adaptive_max_iters_str,
         simulation_period=simulation_period,
-        enable_preconditioning=int(enable_preconditioning)
+        enable_preconditioning=enable_preconditioning
     )
 
     with open(settings_file, 'w') as f:
@@ -305,14 +346,8 @@ def expr(name: str):
 
 def run_expr(
     knot_points: Union[int, List[int]],
-    time_linsys: bool,
-    adaptive_max_iters: bool,
-    fine_grained_timing: bool = False,
-    pcg_max_iters: int = 200,
-    const_update_freq: bool = True,
-    simulation_period: int = 2000,
-    enable_preconditioning: bool = True,
-    run_qdldl: bool = True
+    settings: Settings,
+    run_qdldl: bool = True,
 ):
     if results_tmp_dir.exists():
         print("Cleaning up previous results...")
@@ -321,18 +356,37 @@ def run_expr(
         os.rename(tmp_dir / "results", tmp_dir / backup_name)
 
     results_tmp_dir.mkdir(parents=True, exist_ok=True)
+
     if isinstance(knot_points, int):
         knot_points = [knot_points]
+
+    print("Settings:")
+    print(str(settings))
+
+    with open(results_tmp_dir / "settings.txt", 'w') as f:
+        f.write(str(settings))
+        f.write(f"\n\nknot_points: {knot_points}\n")
+
+    # TODO: write settings to results_tmp_dir/settings.txt
     for n in knot_points:
         write_settings(
-            knot_points=n,
-            time_linsys=time_linsys,
-            adaptive_max_iters=adaptive_max_iters,
-            fine_grained_timing=fine_grained_timing,
-            pcg_max_iters=pcg_max_iters,
-            const_update_freq=const_update_freq,
-            simulation_period=simulation_period,
-            enable_preconditioning=enable_preconditioning
+            n,
+            settings
         )
         compile()
         run(run_qdldl=run_qdldl)
+
+
+def init_runner():
+    global has_been_initialized, dry_run
+
+    if has_been_initialized:
+        return
+
+    has_been_initialized = True
+
+    parser = ArgumentParser(description="Run the MPC experiment with various settings.")
+    parser.add_argument("--dry-run", action="store_true", help="Only compile, do not run the executables.")
+    args = parser.parse_args()
+
+    dry_run = args.dry_run

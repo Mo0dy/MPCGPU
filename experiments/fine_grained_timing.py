@@ -7,6 +7,8 @@
 from runner import *
 
 if __name__ == "__main__":
+    init_runner()
+
     knot_points = [2, 4, 8, 16]
     with expr("baseline"):
         run_expr(
