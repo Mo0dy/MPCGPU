@@ -23,6 +23,7 @@ class TimingMode(Enum):
     LINSYS = 1
     FINE_GRAINED = 2
 
+ADAPTIVE = "adaptive"
 Adaptive: TypeAlias = Literal["adaptive"]
 PCGMaxIters: TypeAlias = Union[int, Adaptive]
 
@@ -37,16 +38,20 @@ class Settings:
     sqp_sim_period: SimPeriod = 2000
     enable_preconditioning: bool = True
 
-    def default():
-        return Settings(
+    @classmethod
+    def default(cls):
+        return cls(
             timing_mode=TimingMode.MINIMAL,
-            pcg_max_iters="adaptive",
+            pcg_max_iters=ADAPTIVE,
             sqp_sim_period=2000,
             enable_preconditioning=True,
         )
 
     def __str__(self):
         return f"timing_mode={self.timing_mode}\npcg_max_iters={self.pcg_max_iters}\nsqp_sim_period={self.sqp_sim_period}\nenable_preconditioning={self.enable_preconditioning}\n"
+
+    def make_title(self) -> str:
+        return f"TM={self.timing_mode}_PCG={self.pcg_max_iters}_SP={self.sqp_sim_period}_Pre={int(self.enable_preconditioning)}"
 
 
 def compile():
@@ -298,11 +303,11 @@ def write_settings(
     print(f"Writing settings to for n={knot_points}", settings_file)
     time_linsys = int(settings.timing_mode != TimingMode.MINIMAL)
     fine_grained_timing = int(settings.timing_mode == TimingMode.FINE_GRAINED)
-    const_update_freq = int(settings.sqp_sim_period != "adaptive")
+    const_update_freq = int(settings.sqp_sim_period != ADAPTIVE)
     # TODO: check if the sim period actually hasno impact if const_update_freq is set to 0
-    simulation_period = 2000 if settings.sqp_sim_period == "adaptive" else settings.sqp_sim_period
+    simulation_period = 2000 if settings.sqp_sim_period == ADAPTIVE else settings.sqp_sim_period
     enable_preconditioning = int(settings.enable_preconditioning)
-    if settings.pcg_max_iters == "adaptive":
+    if settings.pcg_max_iters == ADAPTIVE:
         adaptive_max_iters_str = ""
     else:
         adaptive_max_iters_str = "#define PCG_MAX_ITER {}".format(settings.pcg_max_iters)
@@ -344,7 +349,7 @@ def expr(name: str):
     store_results(name)
     print("Finished experiment:", name)
 
-def run_expr(
+def run_over_knot_points(
     knot_points: Union[int, List[int]],
     settings: Settings,
     run_qdldl: bool = True,
@@ -375,6 +380,24 @@ def run_expr(
         )
         compile()
         run(run_qdldl=run_qdldl)
+
+
+def run_expr(
+        knot_points: Union[int, List[int]],
+        settings: Settings,
+        name: str | None = None,
+        name_prefix: str = "",
+        run_qdldl: bool = True,
+    ):
+    if name is None:
+        name = settings.make_title()
+    name = f"{name_prefix}_{name}"
+    with expr(name):
+        run_over_knot_points(
+            knot_points=knot_points,
+            settings=settings,
+            run_qdldl=run_qdldl
+        )
 
 
 def init_runner():

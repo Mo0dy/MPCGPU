@@ -4,47 +4,60 @@ from runner import *
 
 if __name__ == "__main__":
     knot_points = [2, 8, 16, 32, 64, 128, 256, 512]
-    with expr("baseline_with_precond_sim-time=2000"):
-        run_expr(
-            knot_points=knot_points,
-            time_linsys=False,
-            adaptive_max_iters=False,
-            const_update_freq=True
-        )
 
-    with expr("without_precond_sim-time=2000"):
-        run_expr(
-            knot_points=knot_points,
-            time_linsys=False,
-            adaptive_max_iters=False,
-            const_update_freq=True,
-            enable_preconditioning=False
-        )
+    # Baseline. The settings the paper authors used for the experiments
+    run_expr(
+        knot_points,
+        Settings(
+            timing_mode=TimingMode.MINIMAL,
+            pcg_max_iters=ADAPTIVE,
+            sqp_sim_period=2000
+        ),
+        name_prefix="baseline"
+    )
 
+    # Fine grained timing
+    run_expr(
+        knot_points,
+        Settings(
+            timing_mode=TimingMode.FINE_GRAINED,
+            pcg_max_iters=ADAPTIVE,
+            sqp_sim_period=2000
+        ),
+        name_prefix="fine_grained"
+    )
 
-    with expr("pcg_iters=200"):
-        run_expr(
-            knot_points=knot_points,
-            time_linsys=False,
+    # To check effect of preconditioning we should disable adaptive max iters and either increase or disable the sqp_sim_period ...
+    # Baseline:
+    run_expr(
+        knot_points,
+        Settings(
+            timing_mode=TimingMode.FINE_GRAINED,
             pcg_max_iters=200,
-            adaptive_max_iters=False,
-            const_update_freq=False
-        )
+            sqp_sim_period=ADAPTIVE,
+            enable_preconditioning=True,
+        ),
+        name_prefix="precond"
+    )
 
-    with expr("sim-time=2000_adaptive-max-iters"):
-        run_expr(
-            knot_points=knot_points,
-            time_linsys=False,
-            adaptive_max_iters=True,
-            const_update_freq=True
-        )
+    run_expr(
+        knot_points,
+        Settings(
+            timing_mode=TimingMode.FINE_GRAINED,
+            pcg_max_iters=200,
+            sqp_sim_period=ADAPTIVE,
+            enable_preconditioning=False,
+        ),
+        name_prefix="no_precond"
+    )
 
-    with expr("sim-time=2000_fine-grained-timing"):
-        run_expr(
-            knot_points=knot_points,
-            time_linsys=True,
-            fine_grained_timing=True,
-            const_update_freq=True,
-            adaptive_max_iters=True,
-        )
+    run_expr(
+        knot_points,
+        Settings(
+            timing_mode=TimingMode.MINIMAL,
+            pcg_max_iters=200,
+            sqp_sim_period=ADAPTIVE,
+        ),
+        name_prefix="run_through_pcg_iters"
+    )
     print_experiment_header("DONE")
