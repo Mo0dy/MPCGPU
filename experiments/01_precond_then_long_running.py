@@ -26,7 +26,7 @@ if __name__ == "__main__":
         run_expr(
             knot_points=knot_points,
             time_linsys=False,
-            max_iters=200,
+            pcg_max_iters=200,
             adaptive_max_iters=False,
             const_update_freq=False
         )
@@ -37,5 +37,14 @@ if __name__ == "__main__":
             time_linsys=False,
             adaptive_max_iters=True,
             const_update_freq=True
+        )
+
+    with expr("sim-time=2000_fine-grained-timing"):
+        run_expr(
+            knot_points=knot_points,
+            time_linsys=True,
+            fine_grained_timing=True,
+            const_update_freq=True,
+            adaptive_max_iters=True,
         )
     print_experiment_header("DONE")
