@@ -35,7 +35,7 @@ if __name__ == "__main__":
         knot_points,
         Settings(
             timing_mode=TimingMode.FINE_GRAINED,
-            pcg_max_iters=200,
+            pcg_max_iters=1000,
             sqp_sim_period=ADAPTIVE,
             enable_preconditioning=True,
         ),
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         knot_points,
         Settings(
             timing_mode=TimingMode.FINE_GRAINED,
-            pcg_max_iters=200,
+            pcg_max_iters=1000,
             sqp_sim_period=ADAPTIVE,
             enable_preconditioning=False,
         ),
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         knot_points,
         Settings(
             timing_mode=TimingMode.MINIMAL,
-            pcg_max_iters=200,
+            pcg_max_iters=1000,
             sqp_sim_period=ADAPTIVE,
         ),
         name_prefix="run_through_pcg_iters"
