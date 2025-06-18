@@ -110,6 +110,7 @@ stop_gpu_sampler
 stop_proc_monitor
 
 # Backup the new results
+echo "Backing up results... in ./backups/${SLURM_JOB_ID}_results"
 mkdir -p ./backups
 cp -r ./results ./backups/${SLURM_JOB_ID}_results
 

@@ -5,16 +5,12 @@ import os
 from pathlib import Path
 import subprocess
 from typing import List, Union
+from datetime import datetime
 
 def compile():
     os.system("make clean && make examples -j $(nproc)")
 
 def run(run_qdldl: bool = True):
-    if results_tmp_dir.exists():
-        for item in results_tmp_dir.iterdir():
-            item.unlink()
-        results_tmp_dir.rmdir()
-    results_tmp_dir.mkdir(parents=True, exist_ok=True)
     compile()
     current_path = os.environ.get("LD_LIBRARY_PATH", "")
     new_path = f"{current_path}:{os.getcwd()}/qdldl/build/out"
@@ -38,7 +34,8 @@ def run(run_qdldl: bool = True):
 
 project_root = Path(__file__).parent.parent
 settings_file = project_root / "include/common/settings.cuh"
-results_tmp_dir = project_root / "tmp/results"
+tmp_dir = project_root / "tmp"
+results_tmp_dir = tmp_dir / "results"
 results_dir = project_root / "results"
 
 results_dir.mkdir(parents=True, exist_ok=True)
@@ -317,6 +314,13 @@ def run_expr(
     enable_preconditioning: bool = True,
     run_qdldl: bool = True
 ):
+    if results_tmp_dir.exists():
+        print("Cleaning up previous results...")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"results_backup_{timestamp}"
+        os.rename(tmp_dir / "results", tmp_dir / backup_name)
+
+    results_tmp_dir.mkdir(parents=True, exist_ok=True)
     if isinstance(knot_points, int):
         knot_points = [knot_points]
     for n in knot_points:
