@@ -441,6 +441,7 @@ auto sqpSolveQdldl(uint32_t state_size, uint32_t control_size, uint32_t knot_poi
         std::vector<double>(),
         std::vector<double>(),
         std::vector<double>(),
+        std::vector<double>(),
         std::vector<double>()
     );
 }

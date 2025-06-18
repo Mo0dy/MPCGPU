@@ -74,7 +74,8 @@ void dump_tracking_data(
     std::vector<double> *ktt_time_vec,
     std::vector<double> *shur_time_vec,
     std::vector<double> *dz_time_vec,
-    std::vector<double> *line_search_time_vec
+    std::vector<double> *line_search_time_vec,
+    std::vector<double> *pcg_guess_diff_vec,
 ){
     // Helper function to create file names
     auto createFileName = [&](const std::string& data_type) {
@@ -111,6 +112,10 @@ void dump_tracking_data(
     dumpVectorData(dz_time_vec, "dz_times");
     dumpVectorData(line_search_time_vec, "line_search_times");
 #endif // #if LINSYS_SOLVE == 1 && FINE_GRAINED_TIMING
+
+#if MEASURE_PCG_CLOSENESS_INITIAL_GUESS
+    dumpVectorData(pcg_guess_diff_vec, "pcg_guess_diff");
+#endif // #if MEASURE_PCG_CLOSENESS_INITIAL_GUESS
 
     // Dump two-dimension vector data (tracking_path)
     std::ofstream file(createFileName("tracking_path"));
@@ -209,6 +214,7 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         std::vector<double>,
         std::vector<double>,
         std::vector<double>,
+        std::vector<double>,
         std::vector<double>> sqp_stats;
     uint32_t cur_sqp_iters;
     T cur_tracking_error;
@@ -217,6 +223,11 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
     // For potentially recording fine-grained timing
     std::vector<double> ktt_time_vec, shur_time_vec, dz_time_vec, line_search_time_vec;
     std::vector<double> cur_ktt_time_vec, cur_shur_time_vec, cur_dz_time_vec, cur_line_search_time_vec;
+
+
+    // For recording impact of initial guess
+    std::vector<double> pcg_guess_diff_vec;
+    std::vector<double> cur_pcg_guess_diff_vec;
 
     // mpc iterates
     T *d_lambda, *d_eePos_goal, *d_xu, *d_xu_old;
@@ -322,6 +333,10 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         cur_line_search_time_vec = std::get<9>(sqp_stats),
     #endif // LINSYS_SOLVE == 1
 
+    #if MEASURE_PCG_CLOSENESS_INITIAL_GUESS
+        cur_pcg_guess_diff_vec = std::get<10>(sqp_stats);
+    #endif
+
 
 #if CONST_UPDATE_FREQ
         simulation_time = SIMULATION_PERIOD;
@@ -417,6 +432,10 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         line_search_time_vec.insert(line_search_time_vec.end(), cur_line_search_time_vec.begin(), cur_line_search_time_vec.end());
     #endif // LINSYS_SOLVE == 1
 
+    #if MEASURE_PCG_CLOSENESS_INITIAL_GUESS
+        pcg_guess_diff_vec.insert(pcg_guess_diff_vec.end(), cur_pcg_guess_diff_vec.begin(), cur_pcg_guess_diff_vec.end());
+    #endif // MEASURE_PCG_CLOSENESS_INITIAL_GUESS
+
 
 #if LIVE_PRINT_STATS
         if (control_update_step % 1000 == 50){
@@ -468,7 +487,8 @@ std::tuple<std::vector<toplevel_return_type>, std::vector<linsys_t>, linsys_t> s
         &ktt_time_vec,
         &shur_time_vec,
         &dz_time_vec,
-        &line_search_time_vec
+        &line_search_time_vec,
+        &pcg_guess_diff_vec
     );
 #endif
     

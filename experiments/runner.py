@@ -31,8 +31,15 @@ ADAPTIVE = "adaptive"
 Adaptive: TypeAlias = Literal["adaptive"]
 PCGMaxIters: TypeAlias = Union[int, Adaptive]
 
-
 SimPeriod: TypeAlias = Union[int, Literal["adaptive"]]
+
+class PCGResultReuse(Enum):
+    DISABLE_INSTRUMENTATION = 0 # Default behaviour
+    NO_RESULT_REUSE = 1 # No reuse of the previous result --> closeness measurement would be 0 anyways
+    MEASURE_CLOSENESS_INITIAL_GUESS = 2 # Measuring closeness requires result reuse.
+
+    def __str__(self):
+        return self.name.lower()
 
 
 @dataclass
@@ -41,6 +48,7 @@ class Settings:
     pcg_max_iters: PCGMaxIters
     sqp_sim_period: SimPeriod = 2000
     enable_preconditioning: bool = True
+    pcg_result_reuse: PCGResultReuse = PCGResultReuse.DISABLE_INSTRUMENTATION
 
     @classmethod
     def default(cls):
@@ -52,10 +60,15 @@ class Settings:
         )
 
     def __str__(self):
-        return f"timing_mode={self.timing_mode}\npcg_max_iters={self.pcg_max_iters}\nsqp_sim_period={self.sqp_sim_period}\nenable_preconditioning={self.enable_preconditioning}\n"
+        return f"timing_mode={self.timing_mode}\npcg_max_iters={self.pcg_max_iters}\nsqp_sim_period={self.sqp_sim_period}\nenable_preconditioning={self.enable_preconditioning}\npcg_result_reuse={self.pcg_result_reuse}\n"
 
     def make_title(self) -> str:
-        return f"TM={self.timing_mode}_PCG={self.pcg_max_iters}_SP={self.sqp_sim_period}_Pre={int(self.enable_preconditioning)}"
+        basic_title = f"TM={self.timing_mode}_PCG={self.pcg_max_iters}_SP={self.sqp_sim_period}"
+        if not self.enable_preconditioning:
+            basic_title += "_NO_PRECOND"
+        if self.pcg_result_reuse != PCGResultReuse.DISABLE_INSTRUMENTATION:
+            basic_title += f"_PCG_REUSE={self.pcg_result_reuse}"
+        return basic_title
 
 
 def compile():
@@ -101,6 +114,19 @@ results_dir = project_root / "results"
 results_dir.mkdir(parents=True, exist_ok=True)
 
 settings_f_str = """#pragma once
+
+// ===============================================
+// My Settings
+// ===============================================
+
+// Default value is 1
+#define PCG_RESULT_REUSE {pcg_result_reuse}
+// This only makes sense if PCG_RESULT_REUSE is set to 1
+#define MEASURE_PCG_CLOSENESS_INITIAL_GUESS {measure_pcg_closeness_initial_guess}
+
+#if PCG_RESULT_REUSE == 0 and MEASURE_PCG_CLOSENESS_INITIAL_GUESS == 1
+#error "PCG_RESULT_REUSE must be set to 1 if MEASURE_PCG_CLOSENESS_INITIAL_GUESS is set to 1"
+#endif
 
 #ifndef KNOT_POINTS
 #define KNOT_POINTS {knot_points}
@@ -316,6 +342,19 @@ def write_settings(
     else:
         adaptive_max_iters_str = "#define PCG_MAX_ITER {}".format(settings.pcg_max_iters)
 
+    if settings.pcg_result_reuse == PCGResultReuse.DISABLE_INSTRUMENTATION:
+        pcg_result_reuse = 1
+        measure_pcg_closeness_initial_guess = 0
+    elif settings.pcg_result_reuse == PCGResultReuse.NO_RESULT_REUSE:
+        pcg_result_reuse = 0
+        measure_pcg_closeness_initial_guess = 0
+    elif settings.pcg_result_reuse == PCGResultReuse.MEASURE_CLOSENESS_INITIAL_GUESS:
+        pcg_result_reuse = 1
+        measure_pcg_closeness_initial_guess = 1
+    else:
+        assert False
+        
+
     settings_str = settings_f_str.format(
         knot_points=knot_points,
         time_linsys=time_linsys,
@@ -323,7 +362,9 @@ def write_settings(
         const_update_freq=const_update_freq,
         adaptive_max_iters=adaptive_max_iters_str,
         simulation_period=simulation_period,
-        enable_preconditioning=enable_preconditioning
+        enable_preconditioning=enable_preconditioning,
+        pcg_result_reuse=pcg_result_reuse,
+        measure_pcg_closeness_initial_guess=measure_pcg_closeness_initial_guess,
     )
 
     with open(settings_file, 'w') as f:

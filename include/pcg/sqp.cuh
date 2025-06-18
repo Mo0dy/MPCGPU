@@ -33,12 +33,18 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     std::vector<double> shur_time_vec;
     std::vector<double> dz_time_vec;
     std::vector<double> line_search_time_vec;
+    std::vector<double> pcg_guess_diff_vec;
     bool sqp_time_exit = 1;     // for data recording, not a flag
 
 #if FINE_GRAINED_TIMING
     timespec ktt_start, ktt_end, shur_start, shur_end, dz_start, dz_end, ls_start, ls_end;
 #endif // FINE_GRAINED_TIMING
 
+#if MEASURE_PCG_CLOSENESS_INITIAL_GUESS
+T *d_lambda_prev;
+gpuErrchk(cudaMalloc(&d_lambda_prev, state_size * knot_points * sizeof(T)));
+gpuErrchk(cudaMemset(d_lambda_prev, 0, state_size * knot_points * sizeof(T))); // zero for very first iteration
+#endif
 
     // sqp timing
     struct timespec sqp_solve_start, sqp_solve_end;
@@ -146,6 +152,11 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     bool pcg_exit;
     bool *d_pcg_exit;
     gpuErrchk(cudaMalloc(&d_pcg_exit, sizeof(bool)));
+
+#ifndef PCG_RESULT_REUSE
+    // reset d_lambda to all zero
+    gpuErrchk(cudaMemset(d_lambda, 0, state_size*knot_points*sizeof(T)));
+#endif
 
     void *pcgKernelArgs[] = {
         (void *)&d_S,
@@ -345,6 +356,37 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
         gpuErrchk(cudaPeekAtLastError());
         gpuErrchk(cudaDeviceSynchronize());
 
+#if MEASURE_PCG_CLOSENESS_INITIAL_GUESS
+{
+    const int n = state_size * knot_points;   // vector length
+    const T neg_one = static_cast<T>(-1);
+
+    /*  d_v_temp ← d_lambda                        */
+#if USE_DOUBLES
+    cublasDcopy(handle, n, d_lambda, 1, d_v_temp, 1);
+    /*  d_v_temp ← d_v_temp − d_lambda_prev        */
+    cublasDaxpy(handle, n, &neg_one, d_lambda_prev, 1, d_v_temp, 1);
+    /*  diff = ‖d_v_temp‖₂                         */
+    T diff_norm;
+    cublasDnrm2(handle, n, d_v_temp, 1, &diff_norm);
+#else
+    cublasScopy(handle, n, d_lambda, 1, d_v_temp, 1);
+    cublasSaxpy(handle, n, &neg_one, d_lambda_prev, 1, d_v_temp, 1);
+    T diff_norm;
+    cublasSnrm2(handle, n, d_v_temp, 1, &diff_norm);
+#endif
+
+    pcg_guess_diff_vec.push_back(static_cast<double>(diff_norm));
+
+    /*  λ_prev ← λ  (for next SQP iteration)       */
+#if USE_DOUBLES
+    cublasDcopy(handle, n, d_lambda, 1, d_lambda_prev, 1);
+#else
+    cublasScopy(handle, n, d_lambda, 1, d_lambda_prev, 1);
+#endif
+}
+#endif // MEASURE_PCG_CLOSENESS_INITIAL_GUESS
+
     #if FINE_GRAINED_TIMING
         clock_gettime(CLOCK_MONOTONIC,&ls_end);
         double ls_time = time_delta_us_timespec(ls_start,ls_end);
@@ -455,6 +497,9 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
     gpuErrchk(cudaFree(d_p));
     gpuErrchk(cudaFree(d_v_temp));
     gpuErrchk(cudaFree(d_eta_new_temp));
+#if MEASURE_PCG_CLOSENESS_INITIAL_GUESS
+    gpuErrchk(cudaFree(d_lambda_prev));
+#endif // MEASURE_PCG_CLOSENESS_INITIAL_GUESS
 
 
 
@@ -470,6 +515,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size, const u
         ktt_time_vec,
         shur_time_vec,
         dz_time_vec,
-        line_search_time_vec
+        line_search_time_vec,
+        pcg_guess_diff_vec,
     );
 }

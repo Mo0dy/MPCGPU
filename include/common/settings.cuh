@@ -6,6 +6,16 @@
 
 #define ENABLE_PRECONDITIONING 1
 
+// Default value is 1
+#define PCG_RESULT_REUSE 1
+// This only makes sense if PCG_RESULT_REUSE is set to 1
+#define MEASURE_PCG_CLOSENESS_INITIAL_GUESS 1
+
+#if PCG_RESULT_REUSE == 0 and MEASURE_PCG_CLOSENESS_INITIAL_GUESS == 1
+#error "PCG_RESULT_REUSE must be set to 1 if MEASURE_PCG_CLOSENESS_INITIAL_GUESS is set to 1"
+#endif
+
+
 // ===============================================
 // Their Settings
 // ===============================================
