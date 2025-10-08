@@ -153,8 +153,9 @@ gpuErrchk(cudaMemset(d_lambda_prev, 0, state_size * knot_points * sizeof(T))); /
     bool *d_pcg_exit;
     gpuErrchk(cudaMalloc(&d_pcg_exit, sizeof(bool)));
 
-#ifndef PCG_RESULT_REUSE
+#if !REUSE_PCG_RESULT
     // reset d_lambda to all zero
+    std::cout << "Not reusing PCG result, resetting multipliers to zero" << std::endl;
     gpuErrchk(cudaMemset(d_lambda, 0, state_size*knot_points*sizeof(T)));
 #endif
 
