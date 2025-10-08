@@ -153,10 +153,6 @@ gpuErrchk(cudaMemset(d_lambda_prev, 0, state_size * knot_points * sizeof(T))); /
     bool *d_pcg_exit;
     gpuErrchk(cudaMalloc(&d_pcg_exit, sizeof(bool)));
 
-#if PCG_RESULT_REUSE == 0
-    // reset d_lambda to all zero to avoid warm start
-    gpuErrchk(cudaMemset(d_lambda, 0, state_size*knot_points*sizeof(T)));
-#endif
 
     void *pcgKernelArgs[] = {
         (void *)&d_S,
@@ -214,6 +210,10 @@ gpuErrchk(cudaMemset(d_lambda_prev, 0, state_size * knot_points * sizeof(T))); /
     for(uint32_t sqpiter = 0; sqpiter < SQP_MAX_ITER; sqpiter++){
         // We also time the total time of the sqp loop (to see how large the overhead is)
         // Note that this includes a lot of time necessary for instrumentation (synchronization)
+    #if PCG_RESULT_REUSE == 0
+        // reset d_lambda to all zero to avoid warm start
+        gpuErrchk(cudaMemset(d_lambda, 0, state_size*knot_points*sizeof(T)));
+    #endif
 
     #if FINE_GRAINED_TIMING
         gpuErrchk(cudaDeviceSynchronize());
