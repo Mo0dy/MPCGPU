@@ -34,6 +34,7 @@ __global__ void ls_gato_compute_merit(
 
     T Jk, ck, pointmerit;
 
+    // @LSK_0: calculate alpha (grid)
     T alpha = -1.0 / (1 << alpha_multiplier); // alpha sign
     T *s_eePos_k_traj = s_xux_k + 2 * state_size + control_size;
     T *s_temp = s_eePos_k_traj + 6;

@@ -334,13 +334,14 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
             break;
         }
 
+        // @LS_3: copy results to host
         cudaMemcpy(h_merit_news, d_merit_news, 8 * sizeof(T),
                    cudaMemcpyDeviceToHost);
         if (sqpTimecheck()) {
             break;
         }
 
-        // @LS_3: find minimum
+        // @LS_4: find minimum (on host)
         line_search_step = 0;
         min_merit = h_merit_initial;
         for (int i = 0; i < 8; i++) {
