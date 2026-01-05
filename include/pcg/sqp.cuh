@@ -341,6 +341,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
             break;
         }
 
+#if LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID
         // @LS_4: find minimum (on host)
         line_search_step = 0;
         min_merit = h_merit_initial;
@@ -352,6 +353,11 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
                 line_search_step = i;
             }
         }
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_LINEAR
+        // ...
+#else
+        assert(false && "Invalid LINE_SEARCH_VERSION");
+#endif
 
         if (min_merit == h_merit_initial) {
             // line search failure

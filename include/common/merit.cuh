@@ -2,6 +2,7 @@
 
 #include "dynamics/rbd_plant.cuh"
 #include "integrator.cuh"
+#include "settings.cuh"
 #include <cooperative_groups.h>
 #include <cstdint>
 
@@ -35,7 +36,14 @@ __global__ void ls_gato_compute_merit(
     T Jk, ck, pointmerit;
 
     // @LSK_0: calculate alpha (grid)
+#if LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID
     T alpha = -1.0 / (1 << alpha_multiplier); // alpha sign
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_LINEAR
+    // ...
+#else
+#error "LINE_SEARCH_VERSION not defined"
+#endif
+
     T *s_eePos_k_traj = s_xux_k + 2 * state_size + control_size;
     T *s_temp = s_eePos_k_traj + 6;
 
