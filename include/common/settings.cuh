@@ -4,10 +4,40 @@
 // Line search settings
 // ===============================================
 
+//MPCGPU default
+//for these settings use 8 sampling points (parallel streams)
+
 #define LINE_SEARCH_EXP_GRID 1
-#define LINE_SEARCH_LINEAR 2
+//Acados default backtracking selection criteria
+#define LINE_SEARCH_ACADOS_BACKTRACKING 2
+//functions as baseline -> always use QP solution (since alpha = 1 is often selected as best)
+#define LINE_SEARCH_FULLSTEP_01 3
+
+//for these settings use 50 sampling points (parallel streams)
+#define LINE_SEARCH_LINEAR_MINIMUM_50P 4
+#define LINE_SEARCH_WEIGHTED_BELL_A_09_S_1_50P 5
+#define LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_50P 6
+#define LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_50P 7
+//for these settings use 100 sampling points (parallel streams)
+#define LINE_SEARCH_LINEAR_MINIMUM_100P 8
+#define LINE_SEARCH_WEIGHTED_BELL_A_09_S_1_100P 9
+#define LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_100P 10
+#define LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_100P 11
 
 #define LINE_SEARCH_VERSION LINE_SEARCH_EXP_GRID
+
+//parallel streams can be set by using LINE_SEARCH_VERSION
+#if LINE_SEARCH_VERSION < 4
+#define NUM_ALPHAS 8
+#elif LINE_SEARCH_VERSION < 8
+#define NUM_ALPHAS 50
+//can be replaced
+#elif LINE_SEARCH_VERSION < 12
+#define NUM_ALPHAS 100
+#endif
+
+
+
 
 // ===============================================
 // My Settings

@@ -35,14 +35,38 @@ __global__ void ls_gato_compute_merit(
 
     T Jk, ck, pointmerit;
 
-    // @LSK_0: calculate alpha (grid)
-#if LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID
-    T alpha = -1.0 / (1 << alpha_multiplier); // alpha sign
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_LINEAR
-    // ...
+
+
+#if NUM_ALPHAS == 8
+    const uint32_t num_alphas = 8;
+#elif NUM_ALPHAS == 50
+    const uint32_t num_alphas = 50;
+#elif NUM_ALPHAS == 100
+    const uint32_t num_alphas = 100;
 #else
-#error "LINE_SEARCH_VERSION not defined"
+        assert(false && "Invalid NUM_ALPHAS");
 #endif
+    const T alpha_min = 1e-18;
+    const T alpha_max = 2;
+
+#if LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID
+    // @LSK_0: calculate alpha (exp grid)
+    T alpha = -1.0 / (1 << alpha_multiplier);
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_ACADOS_BACKTRACKING
+    // @LSK_0: calculate alpha (acados like)
+    T alpha = -1.0 / (1 << alpha_multiplier);
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_FULLSTEP_01
+        //full_step returns 8x (-1.0, merit(-1.0))
+    T alpha = -1.0;
+
+//every other implementation uses a quadratic spaced sampling of alpha
+#elif LINE_SEARCH_VERSION >=4
+        T to_add = (alpha_max-alpha_min)/((T) num_alphas);
+        T alpha = (-1.0)*(alpha_min + to_add * (T)alpha_multiplier)*(alpha_min + to_add * (T)alpha_multiplier);
+#else
+    #error "LINE_SEARCH_VERSION not defined"
+#endif //LINE_SEARCH_VERSION
+
 
     T *s_eePos_k_traj = s_xux_k + 2 * state_size + control_size;
     T *s_temp = s_eePos_k_traj + 6;

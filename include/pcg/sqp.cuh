@@ -65,7 +65,19 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
 
     // line search things
     const float mu = 10.0f;
+    //hardcoded, since i can't test -> safer to work immediately
+
+#if NUM_ALPHAS == 8
     const uint32_t num_alphas = 8;
+#elif NUM_ALPHAS == 50
+    const uint32_t num_alphas = 50;
+#elif NUM_ALPHAS == 100
+    const uint32_t num_alphas = 100;
+#else
+        assert(false && "Invalid NUM_ALPHAS");
+#endif
+
+
     T h_merit_news[num_alphas];
     void *ls_merit_kernel = (void *)ls_gato_compute_merit<T>;
     const size_t merit_smem_size =
@@ -115,8 +127,10 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
     gpuErrchk(cudaMalloc(&d_xs, state_size * sizeof(T)));
     gpuErrchk(cudaMemcpy(d_xs, d_xu, state_size * sizeof(T),
                          cudaMemcpyDeviceToDevice));
-    gpuErrchk(cudaMalloc(&d_merit_news, 8 * sizeof(T)));
-    gpuErrchk(cudaMalloc(&d_merit_temp, 8 * knot_points * sizeof(T)));
+                         //CHANGE: changed 8 to num_alphas
+
+    gpuErrchk(cudaMalloc(&d_merit_news, num_alphas * sizeof(T)));
+    gpuErrchk(cudaMalloc(&d_merit_temp, num_alphas * knot_points * sizeof(T)));
     // pcg iterates
 
     gpuErrchk(cudaMalloc(&d_merit_initial, sizeof(T)));
@@ -335,29 +349,230 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
         }
 
         // @LS_3: copy results to host
-        cudaMemcpy(h_merit_news, d_merit_news, 8 * sizeof(T),
+        //CHANGE: changed 8 to num_alphas
+        cudaMemcpy(h_merit_news, d_merit_news, num_alphas * sizeof(T),
                    cudaMemcpyDeviceToHost);
         if (sqpTimecheck()) {
             break;
         }
 
-#if LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID
-        // @LS_4: find minimum (on host)
+
+        T alpha_min_found = 0;
         line_search_step = 0;
         min_merit = h_merit_initial;
-        for (int i = 0; i < 8; i++) {
+        const T alpha_min = 1e-18;
+        const T alpha_max = 2;
+
+
+
+
+#if LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID
+        // @LS_4: find minimum (on host)
+        //CHANGED: changed 8 to num_alphas
+        for (int i = 0; i < num_alphas; i++) {
             //     std::cout << h_merit_news[i] << (i == 7 ? "\n" : " ");
-            /// TODO: reduction ratio
             if (h_merit_news[i] < min_merit) {
                 min_merit = h_merit_news[i];
                 line_search_step = i;
             }
         }
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_LINEAR
-        // ...
+        alpha_min_found = -1.0 / (1 << line_search_step);
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_ACADOS_BACKTRACKING
+        // @LS_4: find minimum (on host)
+        // use biggest alpha that still reduces the function
+        T max_alpha = 0.0;
+        T current_alpha = 0.0;
+        for (int i = 0; i < num_alphas; i++) {
+            if (isnan(h_merit_news[i]) || isinf(h_merit_news[i]))
+                continue;
+            current_alpha = -1.0 / (1 << i);
+            if (h_merit_news[i] <= h_merit_initial) {
+                if (abs(current_alpha) > abs(max_alpha)) {
+                    min_merit = h_merit_news[i];
+                    line_search_step = i;
+                    max_alpha = current_alpha;
+                }
+            }
+        }
+        //line_search_step is different to exp_grid
+        alpha_min_found = max_alpha;
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_FULLSTEP_01
+        //always use alpha = -1.0f because this value is often chosen. (as a baseline)
+        //assuming only returns 8 times 1.0 merit value
+        for (int i = 0; i < num_alphas; i++) {
+            //     std::cout << h_merit_news[i] << (i == 7 ? "\n" : " ");
+            if (h_merit_news[i] < min_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+            }
+        }
+            alpha_min_found = -1.0;
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_LINEAR_MINIMUM_50P
+        for (int i = 0; i < num_alphas; i++) {
+            //     std::cout << h_merit_news[i] << (i == 7 ? "\n" : " ");
+            if (h_merit_news[i] < min_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+            }
+        }
+//this is how the line search should also be implemented in merit.cuh -> quadratic spacing
+        T to_add = (alpha_max-alpha_min)/((T) num_alphas);
+        alpha_min_found = (-1.0)*(alpha_min + to_add * line_search_step)*(alpha_min + to_add * line_search_step);
+//...
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_WEIGHTED_BELL_A_09_S_1_50P
+    T s = 1.0;
+    T a = 0.9;
+    T merit_to_compare = 100000.0;
+    T best_weighted_merit = 10000.0;
+    T to_add = (alpha_max-alpha_min)/((T) num_alphas);
+    T current_alpha = 0.0;
+    T weight_of_alpha = 0.0;
+        for (int i = 0; i < num_alphas; i++) {
+            current_alpha = (-1.0)*(alpha_min + to_add * i)*(alpha_min + to_add * i);
+            //calculating weight of alpha, weighted function value
+            weight_of_alpha = (current_alpha+1)/s;
+            weight_of_alpha = a+((1-a)/(1+(weight_of_alpha*weight_of_alpha)));
+            merit_to_compare = h_merit_news[i]/weight_of_alpha;
+            //compare weighted function values
+            if (merit_to_compare < best_weighted_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+                alpha_min_found=current_alpha;
+            }
+        }
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_50P
+    T s = 1.0;
+    T a = 0.8;
+    T merit_to_compare = 100000.0;
+    T best_weighted_merit = 10000.0;
+    T to_add = (alpha_max-alpha_min)/((T) num_alphas);
+    T current_alpha = 0.0;
+    T weight_of_alpha = 0.0;
+        for (int i = 0; i < num_alphas; i++) {
+            current_alpha = (-1.0)*(alpha_min + to_add * i)*(alpha_min + to_add * i);
+            //calculating weight of alpha, weighted function value
+            weight_of_alpha = (current_alpha+1)/s;
+            weight_of_alpha = a+((1-a)/(1+(weight_of_alpha*weight_of_alpha)));
+            merit_to_compare = h_merit_news[i]/weight_of_alpha;
+            //compare weighted function values
+            if (merit_to_compare < best_weighted_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+                alpha_min_found=current_alpha;
+            }
+        }
+
+
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_50P
+
+    T s = 1.0;
+    T a = 0.999;
+    T merit_to_compare = 100000.0;
+    T best_weighted_merit = 10000.0;
+    T to_add = (alpha_max-alpha_min)/((T) num_alphas);
+    T current_alpha = 0.0;
+    T weight_of_alpha = 0.0;
+        for (int i = 0; i < num_alphas; i++) {
+            current_alpha = (-1.0)*(alpha_min + to_add * i)*(alpha_min + to_add * i);
+            //calculating weight of alpha, weighted function value
+            weight_of_alpha = (current_alpha+1)/s;
+            weight_of_alpha = a+((1-a)/(1+(weight_of_alpha*weight_of_alpha)));
+            merit_to_compare = h_merit_news[i]/weight_of_alpha;
+            //compare weighted function values
+            if (merit_to_compare < best_weighted_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+                alpha_min_found=current_alpha;
+            }
+        }
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_LINEAR_MINIMUM_100P
+        for (int i = 0; i < num_alphas; i++) {
+            //     std::cout << h_merit_news[i] << (i == 7 ? "\n" : " ");
+            if (h_merit_news[i] < min_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+            }
+        }
+//this is how the line search should also be implemented in merit.cuh
+        T to_add = (alpha_max-alpha_min)/((T) num_alphas)
+        alpha_min_found = (-1.0)*(alpha_min + to_add * line_search_step) ;
+//...
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_WEIGHTED_BELL_A_09_S_1_100P
+    T s = 1.0;
+    T a = 0.9;
+    T merit_to_compare = 100000.0;
+    T best_weighted_merit = 10000.0;
+    T to_add = (alpha_max-alpha_min)/((T) num_alphas);
+    T current_alpha = 0.0;
+    T weight_of_alpha = 0.0;
+        for (int i = 0; i < num_alphas; i++) {
+            current_alpha = (-1.0)*(alpha_min + to_add * i)*(alpha_min + to_add * i);
+            //calculating weight of alpha, weighted function value
+            weight_of_alpha = (current_alpha+1)/s;
+            weight_of_alpha = a+((1-a)/(1+(weight_of_alpha*weight_of_alpha)));
+            merit_to_compare = h_merit_news[i]/weight_of_alpha;
+            //compare weighted function values
+            if (merit_to_compare < best_weighted_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+                alpha_min_found=current_alpha;
+            }
+        }
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_100P
+    T s = 1.0;
+    T a = 0.8;
+    T merit_to_compare = 100000.0;
+    T best_weighted_merit = 10000.0;
+    T to_add = (alpha_max-alpha_min)/((T) num_alphas);
+    T current_alpha = 0.0;
+    T weight_of_alpha = 0.0;
+        for (int i = 0; i < num_alphas; i++) {
+            current_alpha = (-1.0)*(alpha_min + to_add * i)*(alpha_min + to_add * i);
+            //calculating weight of alpha, weighted function value
+            weight_of_alpha = (current_alpha+1)/s;
+            weight_of_alpha = a+((1-a)/(1+(weight_of_alpha*weight_of_alpha)));
+            merit_to_compare = h_merit_news[i]/weight_of_alpha;
+            //compare weighted function values
+            if (merit_to_compare < best_weighted_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+                alpha_min_found=current_alpha;
+            }
+        }
+
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_100P
+    T s = 1.0;
+    T a = 0.999;
+    T merit_to_compare = 100000.0;
+    T best_weighted_merit = 10000.0;
+    T to_add = (alpha_max-alpha_min)/((T) num_alphas);
+    T current_alpha = 0.0;
+    T weight_of_alpha = 0.0;
+        for (int i = 0; i < num_alphas; i++) {
+            current_alpha = (-1.0)*(alpha_min + to_add * i)*(alpha_min + to_add * i);
+            //calculating weight of alpha, weighted function value
+            weight_of_alpha = (current_alpha+1)/s;
+            weight_of_alpha = a+((1-a)/(1+(weight_of_alpha*weight_of_alpha)));
+            merit_to_compare = h_merit_news[i]/weight_of_alpha;
+            //compare weighted function values
+            if (merit_to_compare < best_weighted_merit) {
+                min_merit = h_merit_news[i];
+                line_search_step = i;
+                alpha_min_found=current_alpha;
+            }
+        }
 #else
-        assert(false && "Invalid LINE_SEARCH_VERSION");
-#endif
+#error "LINE_SEARCH_VERSION not defined"
+#endif //LINE_SEARCH_VERSION
 
         if (min_merit == h_merit_initial) {
             // line search failure
@@ -372,8 +587,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
             continue;
         }
         // std::cout << "line search accepted\n";
-        alphafinal = -1.0 / (1 << line_search_step); // alpha sign
-
+        alphafinal = alpha_min_found;
         drho = min(drho / rho_factor, 1 / rho_factor);
         rho = max(rho * drho, rho_min);
 
