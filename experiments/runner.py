@@ -137,7 +137,7 @@ settings_f_str = """#pragma once
 #define LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_100P 10
 #define LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_100P 11
 
-#define LINE_SEARCH_VERSION {{line_search_version}}
+#define LINE_SEARCH_VERSION {line_search_version}
 
 //parallel streams can be set by using LINE_SEARCH_VERSION
 #if LINE_SEARCH_VERSION < 4
