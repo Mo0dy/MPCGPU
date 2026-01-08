@@ -57,7 +57,8 @@ SimPeriod: TypeAlias = Union[int, Literal["adaptive"]]
 class Settings:
     timing_mode: TimingMode
     pcg_max_iters: PCGMaxIters
-    sqp_sim_period: SimPeriod = 2000
+    sqp_sim_period: SimPeriod = 2000  # the time the robot is simulated for in us
+    sqp_max_time_us: int | None = None  # the max time sqp is allowed to run for in us if sqp_sim_period is not ADAPTIVE. If None this is set to sqp_sim_period
     enable_preconditioning: bool = True
     line_search_version: LineSearchMode = LineSearchMode.FULLSTEP_01
 
@@ -71,7 +72,7 @@ class Settings:
         )
 
     def __str__(self):
-        return f"timing_mode={self.timing_mode}\npcg_max_iters={self.pcg_max_iters}\nsqp_sim_period={self.sqp_sim_period}\nenable_preconditioning={self.enable_preconditioning}\n"
+        return f"timing_mode={self.timing_mode}\npcg_max_iters={self.pcg_max_iters}\nsqp_sim_period={self.sqp_sim_period}\nsqp_max_time_us={self.sqp_max_time_us}\nenable_preconditioning={self.enable_preconditioning}\nline_search_version={self.line_search_version}\n"
 
     def make_title(self) -> str:
         return f"TM={self.timing_mode}_PCG={self.pcg_max_iters}_SP={self.sqp_sim_period}_Pre={int(self.enable_preconditioning)}"
@@ -319,7 +320,7 @@ LINSYS_SOLVE = 0 uses qdldl as the underlying linear system solver */
 
 
 #ifndef SQP_MAX_TIME_US
-#define SQP_MAX_TIME_US 2000
+#define SQP_MAX_TIME_US {sqp_max_time_us}
 #endif
 
 #ifndef SCHUR_THREADS
@@ -363,9 +364,16 @@ def write_settings(
     print(f"Writing settings to for n={knot_points}", settings_file)
     time_linsys = int(settings.timing_mode != TimingMode.MINIMAL)
     fine_grained_timing = int(settings.timing_mode == TimingMode.FINE_GRAINED)
+
+
+
     const_update_freq = int(settings.sqp_sim_period != ADAPTIVE)
-    # TODO: check if the sim period actually hasno impact if const_update_freq is set to 0
+    # TODO: check if the sim period actually has no impact if const_update_freq is set to 0
     simulation_period = 2000 if settings.sqp_sim_period == ADAPTIVE else settings.sqp_sim_period
+    sqp_max_time_us = settings.sqp_sim_period if settings.sqp_max_time_us is None else settings.sqp_max_time_us
+
+
+
     enable_preconditioning = int(settings.enable_preconditioning)
     if settings.pcg_max_iters == ADAPTIVE:
         adaptive_max_iters_str = ""
@@ -377,6 +385,7 @@ def write_settings(
         time_linsys=time_linsys,
         fine_grained_timing=fine_grained_timing,
         const_update_freq=const_update_freq,
+        sqp_max_time_us=sqp_max_time_us,
         adaptive_max_iters=adaptive_max_iters_str,
         simulation_period=simulation_period,
         enable_preconditioning=enable_preconditioning,
