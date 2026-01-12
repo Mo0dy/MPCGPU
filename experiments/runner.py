@@ -311,10 +311,10 @@ LINSYS_SOLVE = 0 uses qdldl as the underlying linear system solver */
 
 
 #if TIME_LINSYS == 1
-    #define SQP_MAX_ITER    20
+    #define SQP_MAX_ITER    60
     typedef double toplevel_return_type;
 #else
-    #define SQP_MAX_ITER    40
+    #define SQP_MAX_ITER    60
     typedef uint32_t toplevel_return_type;
 #endif
 
