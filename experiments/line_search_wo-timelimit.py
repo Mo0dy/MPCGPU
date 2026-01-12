@@ -25,6 +25,7 @@ if __name__ == "__main__":
                 sqp_max_time_us=100000, # 100ms. --> no early stopping
                 line_search_version=ls_version
             ),
-            name_prefix=str(ls_version)
+            name_prefix=str(ls_version),
+            run_qdldl=False
         )
     print_experiment_header("DONE")

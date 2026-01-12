@@ -23,6 +23,7 @@ if __name__ == "__main__":
                 sqp_sim_period=2000,
                 line_search_version=ls_version
             ),
-            name_prefix=str(ls_version)
+            name_prefix=str(ls_version),
+            run_qdldl=False
         )
     print_experiment_header("DONE")
