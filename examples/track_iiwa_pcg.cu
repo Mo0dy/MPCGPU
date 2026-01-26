@@ -43,29 +43,9 @@ int main(){
         if(start_state == goal_state && start_state != 0){ continue; }
         std::cout << "start: " << start_state << " goal: " << goal_state << std::endl;
 
-        uint32_t num_exit_vals = 5;
+        uint32_t num_exit_vals = 1;
         float pcg_exit_vals[num_exit_vals];
-        if(knot_points==32){
-            pcg_exit_vals[0] = 5e-6;
-            pcg_exit_vals[1] = 7.5e-6;
-            pcg_exit_vals[2] = 5e-6;
-            pcg_exit_vals[3] = 2.5e-6;
-            pcg_exit_vals[4] = 1e-6;
-        }
-        else if(knot_points==64){
-            pcg_exit_vals[0] = 5e-5;
-            pcg_exit_vals[1] = 7.5e-5;
-            pcg_exit_vals[2] = 5e-5;
-            pcg_exit_vals[3] = 2.5e-5;
-            pcg_exit_vals[4] = 1e-5;
-        }
-        else{
-            pcg_exit_vals[0] = 1e-5;
-            pcg_exit_vals[1] = 5e-5;
-            pcg_exit_vals[2] = 1e-4;
-            pcg_exit_vals[3] = 5e-4;
-            pcg_exit_vals[4] = 1e-3;
-        }
+        pcg_exit_vals[0] = 1e-5;
 
 
         for (uint32_t pcg_exit_ind = 0; pcg_exit_ind < num_exit_vals; pcg_exit_ind++){
