@@ -35,13 +35,10 @@ class LineSearchMode(Enum):
     LINE_SEARCH_EXP_ACADOS_BACKTRACKING = 2
     LINE_SEARCH_FULLSTEP_01 = 3
     LINE_SEARCH_QUADR_MINIMUM_50P = 4
-    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_50P = 5
-    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_50P = 6
-    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_50P = 7
-    LINE_SEARCH_QUADR_MINIMUM_100P = 8
-    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_100P = 9
-    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_100P = 10
-    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_100P = 11
+    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1 = 5
+    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1 = 6
+    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1 = 7
+    LINE_SEARCH_QUADR_MINIMUM = 8
     LINE_SEARCH_EXP_GRID_Mod8_No_Bell = 12
     LINE_SEARCH_QUADRATIC_GRID_No_Bell = 13
     LINE_SEARCH_QUADRATIC_GRID_Bell = 14
@@ -66,6 +63,7 @@ class Settings:
     sqp_max_time_us: int | None = None  # the max time sqp is allowed to run for in us if sqp_sim_period is not ADAPTIVE. If None this is set to sqp_sim_period
     enable_preconditioning: bool = True
     line_search_version: LineSearchMode = LineSearchMode.LINE_SEARCH_EXP_GRID_Mod8_No_Bell
+    num_alphas: int = 8  # number of alphas used in line search
 
     @classmethod
     def default(cls):
@@ -77,7 +75,7 @@ class Settings:
         )
 
     def __str__(self):
-        return f"timing_mode={self.timing_mode}\npcg_max_iters={self.pcg_max_iters}\nsqp_sim_period={self.sqp_sim_period}\nsqp_max_time_us={self.sqp_max_time_us}\nenable_preconditioning={self.enable_preconditioning}\nline_search_version={self.line_search_version}\n"
+        return f"timing_mode={self.timing_mode}\npcg_max_iters={self.pcg_max_iters}\nsqp_sim_period={self.sqp_sim_period}\nsqp_max_time_us={self.sqp_max_time_us}\nenable_preconditioning={self.enable_preconditioning}\nline_search_version={self.line_search_version}\nnum_alphas={self.num_alphas}\n"
 
     def make_title(self) -> str:
         return f"TM={self.timing_mode}_PCG={self.pcg_max_iters}_SP={self.sqp_sim_period}_Pre={int(self.enable_preconditioning)}"
@@ -141,15 +139,12 @@ settings_f_str = """#pragma once
 #define LINE_SEARCH_FULLSTEP_01 3
 
 //for these settings use 50 sampling points (parallel streams)
-#define LINE_SEARCH_QUADR_MINIMUM_50P 4
-#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_50P 5
-#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_50P 6
-#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_50P 7
+#define LINE_SEARCH_QUADR_MINIMUM 4
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1 5
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1 6
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1 7
 //for these settings use 100 sampling points (parallel streams)
-#define LINE_SEARCH_QUADR_MINIMUM_100P 8
-#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_100P 9
-#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_100P 10
-#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_100P 11
+#define LINE_SEARCH_QUADR_MINIMUM 8
 
 #define LINE_SEARCH_EXP_GRID_Mod8_No_Bell 12
 #define LINE_SEARCH_QUADRATIC_GRID_No_Bell 13
@@ -160,21 +155,7 @@ settings_f_str = """#pragma once
 
 #define USE_TOL_END_CRITERION 1
 
-//parallel streams can be set by using LINE_SEARCH_VERSION
-#if LINE_SEARCH_VERSION < 4
-#define NUM_ALPHAS 8
-#elif LINE_SEARCH_VERSION < 8
-//#define NUM_ALPHAS 50
-#define NUM_ALPHAS 8
-//can be replaced
-#elif LINE_SEARCH_VERSION < 12
-//#define NUM_ALPHAS 100
-#define NUM_ALPHAS 8
-#else
-//set alpha here if wanting to run an experiment with same alphas for the last methods
-//#define NUM_ALPHAS 32
-#define NUM_ALPHAS 8
-#endif
+#define NUM_ALPHAS {num_alphas}
 
 
 #ifndef KNOT_POINTS
@@ -407,7 +388,8 @@ def write_settings(
         adaptive_max_iters=adaptive_max_iters_str,
         simulation_period=simulation_period,
         enable_preconditioning=enable_preconditioning,
-        line_search_version=settings.line_search_version.value
+        line_search_version=settings.line_search_version.value,
+        num_alphas=settings.num_alphas
     )
 
     with open(settings_file, 'w') as f:

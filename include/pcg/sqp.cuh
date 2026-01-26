@@ -68,12 +68,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
   const float mu = 10.0f;
   // hardcoded, since i can't test -> safer to work immediately
 
-  #if NUM_ALPHAS >0
   const uint32_t num_alphas = NUM_ALPHAS;
-  #else
-  assert(false && "Invalid NUM_ALPHAS");
-  const uint32_t num_alphas = 8;
-  #endif
 
   T h_merit_news[num_alphas];
   void *ls_merit_kernel = (void *)ls_gato_compute_merit<T>;
@@ -358,7 +353,8 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
     const T alpha_min = 0.1;
     const T alpha_max = 1;
 
-#if LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID_Mod8_No_Bell || LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID
+#if LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID_Mod8_No_Bell ||                \
+    LINE_SEARCH_VERSION == LINE_SEARCH_EXP_GRID
 
     // @LS_4: find minimum (on host)
     // CHANGED: changed 8 to num_alphas
@@ -366,13 +362,13 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
 
     for (int i = 0; i < num_alphas; i++) {
       //     std::cout << h_merit_news[i] << (i == 7 ? "\n" : " ");
-      //instead could use (if included more than 8 samples)
-      //current_alpha = pow(2.0, n);
-      current_alpha = -1.0 / (1 << (i%8));
+      // instead could use (if included more than 8 samples)
+      // current_alpha = pow(2.0, n);
+      current_alpha = -1.0 / (1 << (i % 8));
       if (h_merit_news[i] < min_merit) {
         min_merit = h_merit_news[i];
         line_search_step = i;
-        alpha_min_found= current_alpha;
+        alpha_min_found = current_alpha;
       }
     }
 
@@ -386,12 +382,13 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
     T current_alpha = 0.0;
     T weight_of_alpha = 0.0;
     for (int i = 0; i < num_alphas; i++) {
-      //instead could use (if included more than 8 samples)
-      //current_alpha = pow(2.0, n);
-      current_alpha = -1.0 / (1 << (i%8));
-        // calculating weight of alpha, weighted function value
+      // instead could use (if included more than 8 samples)
+      // current_alpha = pow(2.0, n);
+      current_alpha = -1.0 / (1 << (i % 8));
+      // calculating weight of alpha, weighted function value
       weight_of_alpha = (current_alpha + 1) / s;
-      weight_of_alpha = a + ((1 - a) / (1 + (weight_of_alpha * weight_of_alpha)));
+      weight_of_alpha =
+          a + ((1 - a) / (1 + (weight_of_alpha * weight_of_alpha)));
       merit_to_compare = h_merit_news[i] / weight_of_alpha;
       // compare weighted function values
       if (merit_to_compare < best_weighted_merit) {
@@ -433,7 +430,8 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
     }
     alpha_min_found = -1.0;
 
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_MINIMUM_50P || LINE_SEARCH_VERSION == LINE_SEARCH_QUADRATIC_GRID_No_Bell
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_MINIMUM ||                      \
+    LINE_SEARCH_VERSION == LINE_SEARCH_QUADRATIC_GRID_No_Bell
     for (int i = 0; i < num_alphas; i++) {
       //     std::cout << h_merit_news[i] << (i == 7 ? "\n" : " ");
       if (h_merit_news[i] < min_merit) {
@@ -448,7 +446,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
                       (alpha_min + to_add * line_search_step);
     //...
 
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_50P
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1
     T s = 1.0;
     T a = 0.9;
     T merit_to_compare = 100000.0;
@@ -473,7 +471,7 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
       }
     }
 
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_50P
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1
     T s = 1.0;
     T a = 0.8;
     T merit_to_compare = 100000.0;
@@ -498,7 +496,8 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
       }
     }
 
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_50P || LINE_SEARCH_VERSION == LINE_SEARCH_QUADRATIC_GRID_Bell
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1 ||     \
+    LINE_SEARCH_VERSION == LINE_SEARCH_QUADRATIC_GRID_Bell
 
     T s = 1.0;
     T a = 0.999;
@@ -524,105 +523,31 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
       }
     }
 
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_MINIMUM_100P
+#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_MINIMUM
     for (int i = 0; i < num_alphas; i++) {
       //     std::cout << h_merit_news[i] << (i == 7 ? "\n" : " ");
       if (h_merit_news[i] < min_merit) {
-        
+
         min_merit = h_merit_news[i];
         line_search_step = i;
       }
     }
     // this is how the line search should also be implemented in merit.cuh
     T to_add = (alpha_max - alpha_min) / ((T)num_alphas);
-    alpha_min_found = (-1.0) * (alpha_min + to_add * line_search_step) * (alpha_min + to_add * line_search_step);
+    alpha_min_found = (-1.0) * (alpha_min + to_add * line_search_step) *
+                      (alpha_min + to_add * line_search_step);
     //...
-
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_100P
-    T s = 1.0;
-    T a = 0.9;
-    T merit_to_compare = 100000.0;
-    T best_weighted_merit = 10000.0;
-    T to_add = (alpha_max - alpha_min) / ((T)num_alphas);
-    T current_alpha = 0.0;
-    T weight_of_alpha = 0.0;
-    for (int i = 0; i < num_alphas; i++) {
-      current_alpha =
-          (-1.0) * (alpha_min + to_add * i) * (alpha_min + to_add * i);
-      // calculating weight of alpha, weighted function value
-      weight_of_alpha = (current_alpha + 1) / s;
-      weight_of_alpha =
-          a + ((1 - a) / (1 + (weight_of_alpha * weight_of_alpha)));
-      merit_to_compare = h_merit_news[i] / weight_of_alpha;
-      // compare weighted function values
-      if (merit_to_compare < best_weighted_merit) {
-        best_weighted_merit = merit_to_compare;
-        min_merit = h_merit_news[i];
-        line_search_step = i;
-        alpha_min_found = current_alpha;
-      }
-    }
-
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_100P
-    T s = 1.0;
-    T a = 0.8;
-    T merit_to_compare = 100000.0;
-    T best_weighted_merit = 10000.0;
-    T to_add = (alpha_max - alpha_min) / ((T)num_alphas);
-    T current_alpha = 0.0;
-    T weight_of_alpha = 0.0;
-    for (int i = 0; i < num_alphas; i++) {
-      current_alpha =
-          (-1.0) * (alpha_min + to_add * i) * (alpha_min + to_add * i);
-      // calculating weight of alpha, weighted function value
-      weight_of_alpha = (current_alpha + 1) / s;
-      weight_of_alpha =
-          a + ((1 - a) / (1 + (weight_of_alpha * weight_of_alpha)));
-      merit_to_compare = h_merit_news[i] / weight_of_alpha;
-      // compare weighted function values
-      if (merit_to_compare < best_weighted_merit) {
-        best_weighted_merit = merit_to_compare;
-        min_merit = h_merit_news[i];
-        line_search_step = i;
-        alpha_min_found = current_alpha;
-      }
-    }
-
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_100P
-    T s = 1.0;
-    T a = 0.999;
-    T merit_to_compare = 100000.0;
-    T best_weighted_merit = 10000.0;
-    T to_add = (alpha_max - alpha_min) / ((T)num_alphas);
-    T current_alpha = 0.0;
-    T weight_of_alpha = 0.0;
-    for (int i = 0; i < num_alphas; i++) {
-      current_alpha =
-          (-1.0) * (alpha_min + to_add * i) * (alpha_min + to_add * i);
-      // calculating weight of alpha, weighted function value
-      weight_of_alpha = (current_alpha + 1) / s;
-      weight_of_alpha =
-          a + ((1 - a) / (1 + (weight_of_alpha * weight_of_alpha)));
-      merit_to_compare = h_merit_news[i] / weight_of_alpha;
-      // compare weighted function values
-      if (merit_to_compare < best_weighted_merit) {
-        best_weighted_merit = merit_to_compare;
-        min_merit = h_merit_news[i];
-        line_search_step = i;
-        alpha_min_found = current_alpha;
-      }
-    }
 #else
 #error "LINE_SEARCH_VERSION not defined"
 #endif // LINE_SEARCH_VERSION
 #if USE_TOL_END_CRITERION > 0
     T eps = 0.00000001;
 #else
-    //this should result in same results as usual
+    // this should result in same results as usual
     T eps = 0;
 #endif
-//now failure means, we couldn't decrease the function value enough.
-    if (min_merit >= h_merit_initial - eps ) {
+    // now failure means, we couldn't decrease the function value enough.
+    if (min_merit >= h_merit_initial - eps) {
       // line search failure
       drho = max(drho * rho_factor, rho_factor);
       rho = max(rho * drho, rho_min);

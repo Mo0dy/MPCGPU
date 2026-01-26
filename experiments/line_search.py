@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from runner import *
+from itertools import product
 
 if __name__ == "__main__":
     init_runner()
@@ -11,14 +12,7 @@ if __name__ == "__main__":
     knot_points = [16]
     # Baseline. The settings the paper authors used for the experiments
 
-    for ls_version in LineSearchMode:
-
-        # this is set, that we only get the new line search methods in our experiment. (numbers: 12,13,14,15)
-        # if (ls_version < 12):
-        #    continue
-        #till here
-
-        run_expr(
+    for ls_version, num_alphas in product(LineSearchMode, [8, 16]):
             knot_points,
             Settings(
                 # FINE_GRAINED is also interesting.
@@ -29,9 +23,30 @@ if __name__ == "__main__":
                 # leave as is
                 sqp_sim_period=2000,
                 sqp_max_time_us=2000,
-                line_search_version=ls_version
+                line_search_version=ls_version,
+                num_alphas=num_alphas
             ),
-            name_prefix=str(ls_version),
+            name_prefix=f"{str(ls_version)}_{num_alphas}",
             run_qdldl=False
         )
     print_experiment_header("DONE")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
