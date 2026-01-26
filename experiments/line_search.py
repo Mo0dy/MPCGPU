@@ -13,6 +13,7 @@ if __name__ == "__main__":
     # Baseline. The settings the paper authors used for the experiments
 
     for ls_version, num_alphas in product(LineSearchMode, [8, 16]):
+        run_expr(
             knot_points,
             Settings(
                 # FINE_GRAINED is also interesting.
