@@ -5,7 +5,9 @@ from runner import *
 if __name__ == "__main__":
     init_runner()
 
-    knot_points = [128]
+    #knot_points = [2, 4, 8, 16, 32, 64, 128, 256]
+    knot_points = [16, 32, 128]
+    #knot_points = [128]
     # knot_points = [2, 4, 8]
 
     # Baseline. The settings the paper authors used for the experiments

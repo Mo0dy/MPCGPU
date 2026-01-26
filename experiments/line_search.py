@@ -5,12 +5,19 @@ from runner import *
 if __name__ == "__main__":
     init_runner()
 
-    knot_points = [2, 4, 8, 16, 32, 64, 128, 256, 512]
+    #knot_points = [2, 4, 8, 16, 32, 64, 128, 256, 512]
     # knot_points = [2, 4, 8]
-
+    #Felix wanted 32 for reasonable results:
+    knot_points = [32]
     # Baseline. The settings the paper authors used for the experiments
 
     for ls_version in LineSearchMode:
+
+        # this is set, that we only get the new line search methods in our experiment. (numbers: 12,13,14,15)
+        # if (ls_version < 12):
+        #    continue
+        #till here
+
         run_expr(
             knot_points,
             Settings(

@@ -30,18 +30,22 @@ class TimingMode(Enum):
 
 # NOTE: should match the defines in settings.cuh
 class LineSearchMode(Enum):
-    EXP_GRID = 1
-    ACADOS_BACKTRACKING = 2
-    FULLSTEP_01 = 3
-    LINE_SEARCH_LINEAR_MINIMUM_50P = 4
-    LINE_SEARCH_WEIGHTED_BELL_A_09_S_1_50P = 5
-    LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_50P = 6
-    LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_50P = 7
-    LINE_SEARCH_LINEAR_MINIMUM_100P = 8
-    LINE_SEARCH_WEIGHTED_BELL_A_09_S_1_100P = 9
-    LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_100P = 10
-    LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_100P = 11
-
+    # preselecting only some
+    #LINE_SEARCH_EXP_GRID = 1
+    #LINE_SEARCH_EXP_ACADOS_BACKTRACKING = 2
+    #LINE_SEARCH_FULLSTEP_01 = 3
+    #LINE_SEARCH_QUADR_MINIMUM_50P = 4
+    #LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_50P = 5
+    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_50P = 6
+    LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_50P = 7
+    #LINE_SEARCH_QUADR_MINIMUM_100P = 8
+    #LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_100P = 9
+    #LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_100P = 10
+    #LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_100P = 11
+    LINE_SEARCH_EXP_GRID_Mod8_No_Bell = 12
+    LINE_SEARCH_QUADRATIC_GRID_No_Bell = 13
+    LINE_SEARCH_QUADRATIC_GRID_Bell = 14
+    LINE_SEARCH_EXP_GRID_Mod8_Bell = 15
     def __str__(self):
         return self.name.lower()
 
@@ -60,7 +64,7 @@ class Settings:
     sqp_sim_period: SimPeriod = 2000  # the time the robot is simulated for in us
     sqp_max_time_us: int | None = None  # the max time sqp is allowed to run for in us if sqp_sim_period is not ADAPTIVE. If None this is set to sqp_sim_period
     enable_preconditioning: bool = True
-    line_search_version: LineSearchMode = LineSearchMode.FULLSTEP_01
+    line_search_version: LineSearchMode = LineSearchMode.LINE_SEARCH_EXP_GRID_Mod8_No_Bell
 
     @classmethod
     def default(cls):
@@ -128,34 +132,47 @@ settings_f_str = """#pragma once
 
 //MPCGPU default
 //for these settings use 8 sampling points (parallel streams)
-
 #define LINE_SEARCH_EXP_GRID 1
+
 //Acados default backtracking selection criteria
-#define LINE_SEARCH_ACADOS_BACKTRACKING 2
+#define LINE_SEARCH_EXP_ACADOS_BACKTRACKING 2
 //functions as baseline -> always use QP solution (since alpha = 1 is often selected as best)
 #define LINE_SEARCH_FULLSTEP_01 3
 
 //for these settings use 50 sampling points (parallel streams)
-#define LINE_SEARCH_LINEAR_MINIMUM_50P 4
-#define LINE_SEARCH_WEIGHTED_BELL_A_09_S_1_50P 5
-#define LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_50P 6
-#define LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_50P 7
+#define LINE_SEARCH_QUADR_MINIMUM_50P 4
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_50P 5
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_50P 6
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_50P 7
 //for these settings use 100 sampling points (parallel streams)
-#define LINE_SEARCH_LINEAR_MINIMUM_100P 8
-#define LINE_SEARCH_WEIGHTED_BELL_A_09_S_1_100P 9
-#define LINE_SEARCH_WEIGHTED_BELL_A_08_S_1_100P 10
-#define LINE_SEARCH_WEIGHTED_BELL_A_0999_S_1_100P 11
+#define LINE_SEARCH_QUADR_MINIMUM_100P 8
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_09_S_1_100P 9
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_08_S_1_100P 10
+#define LINE_SEARCH_QUADR_WEIGHTED_BELL_A_0999_S_1_100P 11
+
+#define LINE_SEARCH_EXP_GRID_Mod8_No_Bell 12
+#define LINE_SEARCH_QUADRATIC_GRID_No_Bell 13
+#define LINE_SEARCH_QUADRATIC_GRID_Bell 14
+#define LINE_SEARCH_EXP_GRID_Mod8_Bell 15
 
 #define LINE_SEARCH_VERSION {line_search_version}
+
+#define USE_TOL_END_CRITERION 1
 
 //parallel streams can be set by using LINE_SEARCH_VERSION
 #if LINE_SEARCH_VERSION < 4
 #define NUM_ALPHAS 8
 #elif LINE_SEARCH_VERSION < 8
-#define NUM_ALPHAS 50
+//#define NUM_ALPHAS 50
+#define NUM_ALPHAS 8
 //can be replaced
 #elif LINE_SEARCH_VERSION < 12
-#define NUM_ALPHAS 100
+//#define NUM_ALPHAS 100
+#define NUM_ALPHAS 8
+#else
+//set alpha here if wanting to run an experiment with same alphas for the last methods
+//#define NUM_ALPHAS 32
+#define NUM_ALPHAS 8
 #endif
 
 
