@@ -522,21 +522,6 @@ auto sqpSolvePcg(const uint32_t state_size, const uint32_t control_size,
         alpha_min_found = current_alpha;
       }
     }
-
-#elif LINE_SEARCH_VERSION == LINE_SEARCH_QUADR_MINIMUM
-    for (int i = 0; i < num_alphas; i++) {
-      //     std::cout << h_merit_news[i] << (i == 7 ? "\n" : " ");
-      if (h_merit_news[i] < min_merit) {
-
-        min_merit = h_merit_news[i];
-        line_search_step = i;
-      }
-    }
-    // this is how the line search should also be implemented in merit.cuh
-    T to_add = (alpha_max - alpha_min) / ((T)num_alphas);
-    alpha_min_found = (-1.0) * (alpha_min + to_add * line_search_step) *
-                      (alpha_min + to_add * line_search_step);
-    //...
 #else
 #error "LINE_SEARCH_VERSION not defined"
 #endif // LINE_SEARCH_VERSION
