@@ -9,10 +9,10 @@ if __name__ == "__main__":
     #knot_points = [2, 4, 8, 16, 32, 64, 128, 256, 512]
     # knot_points = [2, 4, 8]
     #Felix wanted 32 for reasonable results:
-    knot_points = [16]
+    knot_points = [16, 64, 256]
     # Baseline. The settings the paper authors used for the experiments
 
-    for ls_version, num_alphas in product(LineSearchMode, [8, 16]):
+    for ls_version, num_alphas in product(LineSearchMode, [8, 16, 64]):
         run_expr(
             knot_points,
             Settings(
@@ -27,7 +27,7 @@ if __name__ == "__main__":
                 line_search_version=ls_version,
                 num_alphas=num_alphas
             ),
-            name_prefix=f"{str(ls_version)}_{num_alphas}",
+            name_prefix=f"{str(ls_version)}_nalpha={num_alphas}",
             run_qdldl=False
         )
     print_experiment_header("DONE")
